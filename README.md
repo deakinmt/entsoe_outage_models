@@ -3,10 +3,18 @@
 A package for building time-series models of generator outages
 based on NW European countries.
 
+In general, the scripts use options to select what to run - e.g.,
+entsoeOutageDownload.py line  17-24 can be changed from 0 to 1
+to enable those options.
 
 
 Scripts / options
 ---
+entsoeOutageDownload.py - a script for automating the download of 
+    outage data for individual bidding zones
+entsoeOutage.py - a script for processing the outage data into .pkl
+    files for onward analysis (e.g., creating a time series of
+    data), as well as exploring the production & generation units.
 download_config.py - various information for changing download options,
     including the token used to call the API.
 entsoeProductionDownload.py - A script to downnload production and 
@@ -17,6 +25,7 @@ Directories
 ---
 apiDoc - various bits of documentation from entsoe's API website
 entsoeData - firectory which entsoe data is downloaded into
+gallery - directory to save figures by default
 misc - miscellaneous
 
 
@@ -35,3 +44,5 @@ Acronyms
 - png = Production aNd Generation
 - CH = ClearHeads (project)
 - BZ = Balancing Zone
+- APs = Availability Periods
+- DPs = Datetime [Availability] Periods (reconciled APs for a single BZ/country)

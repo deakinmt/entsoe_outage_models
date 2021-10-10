@@ -128,3 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 entsoeData/png/
+entsoeData/outage_data/
+entsoeData/output_cache/APs/
+entsoeData/output_cache/DPs/
+gallery/

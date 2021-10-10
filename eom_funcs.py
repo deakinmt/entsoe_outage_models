@@ -436,6 +436,8 @@ def load_aps(cc,sd,rerun=True,save=False,):
     Inputs
     ---
     cc - country to load
+    sd - save directory
+    rerun - if False, then simply load the data from 
     
     Returns
     ---
@@ -445,8 +447,8 @@ def load_aps(cc,sd,rerun=True,save=False,):
     kksD - the sorted start datetimes of all of the APs keys
     
     """
-    ld_ = os.path.join(sd,'outage_data3')
-    sd_ = os.path.join(sd,'cache','APs3',)
+    ld_ = os.path.join(sd,'outage_data')
+    sd_ = os.path.join(sd,'output_cache','APs',)
     _ = os.mkdir(sd_) if not os.path.exists(sd_) else None
     fn_ = os.path.join(sd_,f'{cc}_APs.pkl')
     
@@ -544,7 +546,7 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
     dpsF - the forced outages (nominally all)
     dpsP - the planned outages (nominally zero)
     """
-    sd_ = os.path.join(sd,'cache','DPs3',)
+    sd_ = os.path.join(sd,'output_cache','DPs',)
     _ = os.mkdir(sd_) if not os.path.exists(sd_) else None
     fn_ = os.path.join(sd_,f'{cc}_APs{d2s(dstart)}-{d2s(dend)}.pkl')
     
@@ -572,12 +574,6 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
                                                 'readme':readme},file)
     
     return drange,dpsF,dpsP
-
-# date to string functions
-d2s = lambda d: d.isoformat()[:13].replace('-','').replace('T','')
-s2d = lambda s: datetime(*[int(v) for v in [s[:4],s[4:6],s[6:8],s[8:]]])
-m2s = lambda m: '-'.join([f'{ii:02d}' for ii in [m.year,m.month,m.day]])
-s2m = lambda s: datetime(*[int(v) for v in s.split('-')])
 
 def process_aps(APsK,dlo,dhi,mm):
     """Use APs to find the forced and unforced outages.
@@ -687,13 +683,13 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks):
     Inputs
     ---
     dstart, dend - start/end dates to process
-    kks, kksD, APs, mm - see 
+    kks, kksD, APs, mm - see help(eomf.load_aps)
     
     Returns
     ---
-    - drange - numpy array of datetimes
-    - dpsF - numpy array of outage data (at the moment is ALL)
-    - dpsP - for future, numpy array of planned (at moment all zeros)
+    - drange - datetimes
+    - dpsF - forced outages time series
+    - dpsP - planned outages time series
     """
     drange = np.arange(dstart,dend,timedelta(0,3600),dtype=object)
     dr_pair = np.c_[drange,np.r_[drange[1:],dend]]
@@ -928,3 +924,8 @@ cnvtr_flat = {k:'na' for k in cnvtr_elexon.keys() if k not in flat_out}
 for k in flat_out:
     cnvtr_flat[k] = None
 
+# date to string functions
+d2s = lambda d: d.isoformat()[:13].replace('-','').replace('T','')
+s2d = lambda s: datetime(*[int(v) for v in [s[:4],s[4:6],s[6:8],s[8:]]])
+m2s = lambda m: '-'.join([f'{ii:02d}' for ii in [m.year,m.month,m.day]])
+s2m = lambda s: datetime(*[int(v) for v in s.split('-')])
