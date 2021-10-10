@@ -1,0 +1,84 @@
+# For details of these types of scripts go to https://matplotlib.org/users/customizing.html
+# Examples of stylesheets: https://matplotlib.org/gallery/style_sheets/style_sheets_reference.html. Particularly useful is the classic.mplstyle.
+
+
+
+# This style is based on tidySettings, but modified slightly to make 
+# it match IEEE-style formatting. M. Deakin, Summer 2020
+
+# ax.tick_params(direction="in")
+# legend = ax.legend()
+# legend = plt.legend(framealpha=1.0,fancybox=0,edgecolor='k')
+# legend.get_frame().set_linewidth(0.4)
+# [i.set_linewidth(0.4) for i in ax.spines.values()]
+# ax.tick_params(direction="in",bottom=1,top=1,left=1,right=1,grid_linewidth=0.4,width=0.4,length=2.5)
+# ax.plot(####,linewidth=1,markersize=4)
+
+
+figure.figsize: 5.2, 3.6    # figure size in inches
+
+# text.usetex: True
+font.family: serif
+font.serif: Times New Roman, cmr10, DejaVu Serif, STIXGeneral
+font.size: 11.0
+mathtext.fontset: cm
+
+
+axes.labelsize: 11.0
+# axes.ticksize: 8.0
+
+legend.framealpha: None
+legend.fancybox: 0
+legend.edgecolor: black
+legend.shadow: False
+patch.linewidth: 0.4
+
+xtick.direction: in
+ytick.direction: in
+xtick.bottom: 1
+xtick.top: 1
+ytick.left: 1
+ytick.right: 1
+xtick.major.width    : 0.4    # major tick width in points
+xtick.major.size    : 2.5    # major tick width in points
+ytick.major.width    : 0.4    # major tick width in points
+ytick.major.size    : 2.5    # major tick width in points
+xtick.major.pad    : 4    # major tick width in points
+ytick.major.pad    : 4    # major tick width in points
+
+xtick.labelsize: 10.5
+ytick.labelsize: 10.5
+
+axes.grid: True
+axes.linewidth: 0.4
+axes.prop_cycle: cycler('color',((0.0000, 0.4470,  0.7410  ), (0.8500, 0.3250,  0.0980  ), (0.9290, 0.6940,  0.1250  ),  (0.4940, 0.1840,  0.5560  ),  (0.4460, 0.6740,  0.1180  ),  (0.3010, 0.7450,  0.9330  ),  (0.6350, 0.0780,  0.1840  ))) # same as the 'matlab' colormap. To use the matlab colors, see email 'matlab python colormaps color colours colour'
+
+lines.linewidth:1.2
+
+grid.linestyle: -
+grid.linewidth: 0.4
+
+savefig.dpi: 300
+savefig.pad_inches: 0
+savefig.bbox: tight
+
+keymap.save: ctrl+s
+keymap.pan: s,p
+keymap.zoom: z,o
+#keymap.xscale: s # these annoying toggle log-linear, not x/y constrained?
+#keymap.yscale: d
+
+# TESTING SCRIPT:
+# x = np.linspace(0.001,10)
+# y = np.sin(x)/x
+# plt.plot(x,y+0)
+# plt.plot(x,y+1)
+# plt.plot(x,y+2)
+# plt.plot(x,y+3)
+# plt.plot(x,y+4)
+# plt.plot(x,y+5)
+# plt.plot(x,y+6)
+# plt.legend(('hello','world','yo'))
+# plt.xlabel('Yo yo yo')
+# plt.ylabel('Wassup')
+# plt.show()
