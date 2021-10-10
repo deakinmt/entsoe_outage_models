@@ -9,6 +9,8 @@ with open(os.path.join(sys.path[0],'import_list.py')) as file:
 # Config parameters
 from download_config import dstart, dend, dstart_xtra, dend_xtra, dT
 ds, de = dstart_xtra, dend_xtra
+from scipy import sparse
+from eom_utils import aMulBsp
 
 # Select the countries to use
 ccs = ['GB', 'IE', 'I0', 'BE', 'NL', 'FR']
@@ -22,6 +24,9 @@ fig_entsoeout = 0
 fig_entsoePs = 0
 fig_pngUnits = 0
 fig_hydro = 0
+
+# Misc figures
+pltTsGenerator = 0
 
 # Save figure flag
 sf = 0
@@ -176,5 +181,36 @@ if fig_pngUnits or fig_hydro:
             
             tlps()
 
+
+if pltTsGenerator:
+    bog = eomf.bzOutageGenerator()
+
+    # transition probability - ccgt
+    trn_avl = 0.989
+    lt_avl = 0.9
+
+    n_yrs = 1
+    ng = 100
+    nt = n_yrs*20*7*24
+
+    fig, axs = plt.subplots(figsize=(7.3,6.5),nrows=3,sharey=True,)
+    for ax,ng in zip(axs,[10,30,100]):
+        avl, ttf, ttr = bog.build_avail_matrix(trn_avl,lt_avl,ng,nt,)
+        asd = aMulBsp(np.ones(ng),avl)
+        
+        ax.plot(np.arange(len(asd))/(24*7),100*asd/ng,
+                                            label='$N_{\mathrm{gen}}$='+f'{ng}')
+        ax.legend()
+        # ax.set_title(f'No. generators: {ng}')
+        ax.set_xlabel('Week of the winter')
+        ax.set_ylabel('% total generation\nout of service')
+    
+    if sf:
+        sff('pltTsGenerator')
+    
+    tlps()
+
+    out_avl = 1 - (np.sum(avl)/(ng*avl.shape[1]))
+    print(out_avl)
 
 

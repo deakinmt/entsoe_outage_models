@@ -787,3 +787,9 @@ def mtOdict(ll):
     [od.__setitem__(k,[]) for k in ll]
     return od
 
+def aMulBsp(a,b):
+    """Returns a.dot(b) if b is sparse, as a numpy array."""
+    val = (b.T.dot(a.T)).T
+    if sparse.issparse(val):
+        val = val.toarray()
+    return val

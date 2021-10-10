@@ -11,12 +11,19 @@ import xml.etree.ElementTree as ET
 from importlib import reload
 from copy import deepcopy
 from mosek.fusion import *
+from scipy import sparse
 
 from eom_utils import repl_list, fn_root, data2csv, structDict, sctXt,\
         tDict2stamps, boxplotqntls, nanlt, nangt, plotEdf, cdf2qntls, rerr
 exec(repl_list)
 from entsoe_py_data import BIDDING_ZONES, PSRTYPE_MAPPINGS
 from progress.bar import Bar
+
+from numpy.random import MT19937, Generator, SeedSequence
+def rngSeed():
+    return Generator(MT19937(SeedSequence(0)))
+
+rng = rngSeed()
 
 # For the list of attributes, see 'ENTSO-E TRANSPARENCY PLATFORM
 # DATA EXTRACTION PROCESS IMPLEMENTATION GUIDE'.
@@ -881,6 +888,8 @@ cnvtr_ecr = {
 
 # Table 4, BSC Loss of Load Probability Calculation Statement Version 2, 2019
 # https://www.elexon.co.uk/documents/bsc-codes/lolp/loss-of-load-probability-calculation-statement/
+# Accessed 10/10/21
+# Availability factors from one-hour forecast MEL
 avlbty_elexon = {
     'oil':0.998,
     'ocgt':0.997,
@@ -929,3 +938,60 @@ d2s = lambda d: d.isoformat()[:13].replace('-','').replace('T','')
 s2d = lambda s: datetime(*[int(v) for v in [s[:4],s[4:6],s[6:8],s[8:]]])
 m2s = lambda m: '-'.join([f'{ii:02d}' for ii in [m.year,m.month,m.day]])
 s2m = lambda s: datetime(*[int(v) for v in s.split('-')])
+
+# ============
+
+class bzOutageGenerator():
+    """Class for building and validating outages for peak seasons.
+    
+    Assumes independent outages for generators; technologies are modelled using
+    geometric distributions for outage and repair times.
+    
+    """
+    def __init__(self,):
+        pass
+    
+    @staticmethod
+    def build_avail_matrix(trn_avl,lt_avl,ng,nt,):
+        """Build a sparse boolean availability matrix, with i,j if in outage.
+         
+        Uses the geometric function to simulate the number of transitions to 
+        failure/repair.
+        
+        Inputs
+        ---
+        trn_avl - the one-transition availbility
+        lt_avl - the long-term availability (used to create mttr)
+        ng - number of generators
+        nt - number of time periods to return
+        
+        Returns
+        ---
+        avl - sparse csc matrix with 1 if the generator is in an outage condition
+        ttf - transitions to failure
+        ttr - transitions to repair
+        """
+        lmd = 1-trn_avl
+        mu = lmd*lt_avl/(1-lt_avl)
+        
+        # buffer at the start to ensure the zero state is effectively ignored
+        n0 = int(np.round(3/lmd)) # as it starts with all at the same state
+        n_trn = np.round(1.1*(nt + n0)*(1-lt_avl)).astype(int)
+        
+        # Simulate time to failure and time to repair
+        ttf = rng.geometric(p=lmd,size=(ng,n_trn))
+        ttr = rng.geometric(p=mu,size=(ng,n_trn))
+        
+        i0s = np.cumsum(ttf+np.c_[np.zeros(ng,dtype=int),ttr[:,:-1]],axis=1)
+        i1s = np.cumsum(ttf+ttr,axis=1,)
+        
+        avl = sparse.lil_matrix((ng,max(i1s[:,-1])),dtype=bool)
+        for rr,(ri0s,ri1s) in enumerate(zip(i0s,i1s)):
+            for i0,i1 in zip(ri0s,ri1s):
+                avl[rr,i0:i1]=1
+        
+        assert(min(i1s[:,-1])>nt+n0)
+        avl = avl[:,n0:nt+n0].tocsc()
+        
+        return avl, ttf, ttr
+    
