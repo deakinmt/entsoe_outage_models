@@ -798,3 +798,10 @@ def aMulBsp(a,b):
     if sparse.issparse(val):
         val = val.toarray()
     return val
+
+def letterFilter(nms,fltr):
+    if not fltr is None:
+        nms = [nm for nm in nms if nm[0]==fltr]
+    else:
+        pass
+    return nms

@@ -12,6 +12,7 @@ from importlib import reload
 from copy import deepcopy
 from mosek.fusion import *
 from scipy import sparse
+import quantecon as qe
 
 from eom_utils import repl_list, fn_root, data2csv, structDict, sctXt,\
         tDict2stamps, boxplotqntls, nanlt, nangt, plotEdf, cdf2qntls, rerr
@@ -20,8 +21,15 @@ from entsoe_py_data import BIDDING_ZONES, PSRTYPE_MAPPINGS
 from progress.bar import Bar
 
 from numpy.random import MT19937, Generator, SeedSequence
-def rngSeed():
-    return Generator(MT19937(SeedSequence(0)))
+def rngSeed(seed=0,):
+    """Seed a random number generator at seed.
+    
+    Used seed = None for a random state.
+    """
+    if seed is None:
+        return Generator(MT19937(SeedSequence(seed)))
+    else:
+        return Generator(MT19937())
 
 rng = rngSeed()
 
@@ -859,6 +867,7 @@ avlbty_ecr = {
         'ess_45':0.7503,
         'ess_50':0.9508,
         'ess_55':0.9508,
+        None:np.nan,
         }
 
 cnvtr_ecr = {
@@ -898,6 +907,7 @@ avlbty_elexon = {
     'pumped_storage':0.998,
     'ccgt':0.989,
     'coal':0.986,
+    None:np.nan,
     }
 
 cnvtr_elexon = {
@@ -925,6 +935,7 @@ cnvtr_elexon = {
         'Wind Onshore':'wind_onshore',
         }
 
+
 avlbty_flat = {'na':1.0}
 
 flat_out = ['Wind Offshore','Wind Onshore','Solar','Other renewable',
@@ -948,7 +959,25 @@ class bzOutageGenerator():
     geometric distributions for outage and repair times.
     
     """
-    def __init__(self,av_model='elexon',):
+    # Map from electricity capacity report titles to equivalent Elexon types
+    cnvtr_ecr2elexon = {
+        'steam_oil':'oil',
+        'ocgt':'ocgt',
+        'recip':'oil',
+        'nuclear':'nuclear',
+        'hydro':'hydro',
+        'ccgt':'ccgt',
+        'chp':'ccgt',
+        'coal':'coal',
+        'biomass':'coal',
+        'waste':'coal',
+        None:None,
+        'solar':None,
+        'wind_offshore':None,
+        'wind_onshore':None,
+    }
+    
+    def __init__(self,av_model='ecr',):
         """Initialise bzOutageGenerator class.
         
         Options for the av_model are:
@@ -959,55 +988,97 @@ class bzOutageGenerator():
         
         """
         self.set_avlbty(av_model,)
+        self.set_trn_avl()
         self.getGeneratorPortfolios()
     
+    def build_unavl_model(self,nt=24*7*20*1,yr=2020,assign=True,seed=None,):
+        """Build the unavailability matrices for all countries in self.fleets.
+        
+        Inputs
+        ---
+        nt - length of data to be generated, in hours (default 1 20 week winter)
+        yr - the fleet year to choose
+        assign - if True (default) set to self.unavl
+        seed - seed to pass to self.build_unavl_matrix
+        
+        Returns
+        ---
+        If assign=False, unavl is a Bunch of unavailabilities for each cc.
+        
+        """
+        unavl = Bunch({'ccs':deepcopy(self.fleets.ccs)})
+        for cc in unavl.ccs:
+            unavl[cc] = {
+            'v':np.concatenate([v for v in self.fleets[cc][yr].values()]),
+            'v_lt':np.concatenate([v*self.avlbty[self.cnvtr[k]]
+                                for k,v in self.fleets[cc][yr].items()]),
+            }
+            
+            # Build the vector of generator sizes
+            ng_all = len(unavl[cc]['v'])
+            unavl[cc]['ua'] = np.zeros((ng_all,nt),dtype=bool)
+            
+            # AA = [] # <-- alternative method
+            i0 = 0
+            for k,v in self.fleets[cc][yr].items():
+                ng = len(v)
+                k_ = self.cnvtr[k]
+                k__ = self.cnvtr_ecr2elexon[k_]
+                unavl[cc]['ua'][i0:i0+ng] = self.build_unavl_matrix(
+                        self.trn_avl[k__],self.avlbty[k_],ng,nt,seed=seed,)
+                i0+=ng
+                # <-- alternative method
+                # AA.append(self.build_unavl_matrix(
+                            # self.trn_avl[k__],self.avlbty[k_],ng,nt))
+        if assign:
+            self.unavl = unavl
+        else:
+            return unavl
+    
     @staticmethod
-    def build_avail_matrix(trn_avl,lt_avl,ng,nt,):
-        """Build a sparse boolean availability matrix, with i,j if in outage.
+    def build_unavl_matrix(trn_avl,lt_avl,ng,nt,seed=None,):
+        """Build an unavailability matrix, with i,j = 1 if in outage.
          
         Uses the geometric function to simulate the number of transitions to 
         failure/repair.
         
-        Some of this is partially based on the Chapter 10 of Billinton and 
-        Allan's "Reliability Evaluation of Engineering Systems", 2nd edition.
+        The markov chain generator used is based on the follow description:
+        https://python.quantecon.org/finite_markov.html
         
         Inputs
         ---
         trn_avl - the one-transition availbility
-        lt_avl - the long-term availability (used to create mttr)
+        lt_avl - the long-term availability
         ng - number of generators
         nt - number of time periods to return
+        seed - the random seed used to simulate the MC output; None for random
         
         Returns
         ---
-        avl - sparse csc matrix with 1 if the generator is in an outage condition
-        ttf - transitions to failure
-        ttr - transitions to repair
+        unavl - ng x nt matrix with 1 in unavailable.
         """
+        # Random number generation initialisation
+        rng_ = rngSeed(seed=seed,)
+        seed = rng.integers(0,2**32)
+        
+        # If in trn_avl or 
+        if ng==0 or np.isnan(trn_avl):
+            return np.zeros((ng,nt,))
+        
+        # Calculate the transition probabilities
         lmd = 1-trn_avl
         mu = lmd*lt_avl/(1-lt_avl)
         
-        # buffer at the start to ensure the zero state is effectively ignored
-        n0 = int(np.round(3/lmd)) # as it starts with all at the same state
-        n_trn = np.round(1.1*(nt + n0)*(1-lt_avl)).astype(int)
+        # Build the Markov Chaing probability matrix and initial state
+        PP = [[trn_avl,1-trn_avl],[mu,1-mu]]
+        state_init = rng_.choice([0,1],size=(ng,),p=[lt_avl,1-lt_avl])
         
-        # Simulate time to failure and time to repair
-        ttf = rng.geometric(p=lmd,size=(ng,n_trn))
-        ttr = rng.geometric(p=mu,size=(ng,n_trn))
+        # Simulate the outages
+        mc = qe.MarkovChain(PP)
+        unavl = mc.simulate(ts_length=nt,init=state_init,random_state=seed,)
         
-        i0s = np.cumsum(ttf+np.c_[np.zeros(ng,dtype=int),ttr[:,:-1]],axis=1)
-        i1s = np.cumsum(ttf+ttr,axis=1,)
-        
-        avl = sparse.lil_matrix((ng,max(i1s[:,-1])),dtype=bool)
-        for rr,(ri0s,ri1s) in enumerate(zip(i0s,i1s)):
-            for i0,i1 in zip(ri0s,ri1s):
-                avl[rr,i0:i1]=1
-        
-        assert(min(i1s[:,-1])>nt+n0)
-        avl = avl[:,n0:nt+n0].tocsc()
-        
-        return avl, ttf, ttr
-        
+        return unavl
+    
     @staticmethod
     def clean_inPrdData(data):
         """Clean the installed production data matrix downloaded from ENTSOe.
@@ -1036,6 +1107,10 @@ class bzOutageGenerator():
         elif av_model=='flat':
             self.avlbty = avlbty_flat
             self.cnvtr = cnvtr_flat
+    
+    def set_trn_avl(self,):
+        """Set the one-hour transition probability."""
+        self.trn_avl = avlbty_elexon
     
     def getGeneratorPortfolios(self,):
         """Get the generator portfolios for all countries using entsoe.
@@ -1121,7 +1196,8 @@ class bzOutageGenerator():
         # indexes and dates
         idate,ipwr = [self.nsePng.head.index(vv) 
                                             for vv in ['impl_date','nomP']]
-        fleets = {yr:mtDict(rr) for yr in self.nseInPrd.h}
+        
+        fleets = {yr:mtOdict(rr) for yr in self.nseInPrd.h}
         for j,yr in enumerate(self.nseInPrd.h):
             for i,r in enumerate(rr):
                 if cc_tbl[i,j]>0 and len(gens[r])>0:
@@ -1161,7 +1237,10 @@ class bzOutageGenerator():
                     if vbs:
                         print(
                            f'No data for {cc}, {yr}, {r}, ({cc_tbl[i,j,]} MW)')
-                    fleets[yr][r] = cc_tbl[i,j]
+                    fleets[yr][r] = np.array([cc_tbl[i,j]])
+        _ = [[ff.__setitem__(k,np.zeros((0,),)) for k,v in ff.items()
+                            if type(v) is list] for yr,ff in fleets.items()]
+        
         return fleets
 
 

@@ -27,6 +27,7 @@ fig_hydro = 0
 
 # Misc figures
 pltTsGenerator = 0
+pltTsCcWinters = 0
 
 # Save figure flag
 sf = 0
@@ -34,12 +35,13 @@ sf = 0
 # Script options
 rerun = 0
 cc = 'GB' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR'
-
-self = eomf.bzOutageGenerator()
+av_model = 'ecr'
 
 # Load the data and get the clock & keys
 APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
+self = eomf.bzOutageGenerator(av_model=av_model,)
 
+    
 if process_APs:
     for cc in ccs:
         APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=True,save=True)
@@ -186,24 +188,23 @@ if fig_pngUnits or fig_hydro:
 
 if pltTsGenerator:
     bog = eomf.bzOutageGenerator()
-
+    
     # transition probability - ccgt
     trn_avl = 0.989
     lt_avl = 0.9
-
+    
     n_yrs = 1
     ng = 100
     nt = n_yrs*20*7*24
 
     fig, axs = plt.subplots(figsize=(7.3,6.5),nrows=3,sharey=True,)
     for ax,ng in zip(axs,[10,30,100]):
-        avl, ttf, ttr = bog.build_avail_matrix(trn_avl,lt_avl,ng,nt,)
-        asd = aMulBsp(np.ones(ng),avl)
+        avl = bog.build_unavl_matrix(trn_avl,lt_avl,ng,nt,)
+        asd = np.ones(ng).dot(avl)
         
         ax.plot(np.arange(len(asd))/(24*7),100*asd/ng,
                                             label='$N_{\mathrm{gen}}$='+f'{ng}')
         ax.legend()
-        # ax.set_title(f'No. generators: {ng}')
         ax.set_xlabel('Week of the winter')
         ax.set_ylabel('% total generation\nout of service')
     
@@ -211,8 +212,25 @@ if pltTsGenerator:
         sff('pltTsGenerator')
     
     tlps()
-
+    
     out_avl = 1 - (np.sum(avl)/(ng*avl.shape[1]))
     print(out_avl)
 
-
+if pltTsCcWinters:
+    ua = self.build_unavl_model(assign=False,seed=0,)
+    for cc in ua.ccs:
+        # Calculate the outages and long-term mean outage rate, in GW
+        outages = ua[cc]['v'].dot(ua[cc]['ua'])/1e3
+        isel = np.where(np.not_equal(np.nansum(ua[cc]['ua'],axis=1),0))[0]
+        lt_mean = np.nansum(ua[cc]['v'][isel] - ua[cc]['v_lt'][isel])/1e3
+        
+        fig, ax = plt.subplots(figsize=(5.5,3.2),)
+        plt.plot(np.arange(len(outages))/(24*7),outages,)
+        plt.xlabel('Time, weeks')
+        plt.ylabel('Outages, GW')
+        plt.title(f'{cc} Outages, long-term mean: {lt_mean:.2f} GW')
+        if sf:
+            sff(f'pltTsCcWinters_{cc}',sd_mod='pltTsCcWinters',)
+            plt.close()
+        else:
+            tlps()

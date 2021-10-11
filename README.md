@@ -55,3 +55,5 @@ Acronyms
 - BZ = Balancing Zone
 - APs = Availability Periods
 - DPs = Datetime [Availability] Periods (reconciled APs for a single BZ/country)
+- ECR = [NGESO EMR Delivery Body's] Electricity Capacity Report
+
