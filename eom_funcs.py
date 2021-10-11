@@ -948,8 +948,18 @@ class bzOutageGenerator():
     geometric distributions for outage and repair times.
     
     """
-    def __init__(self,):
-        pass
+    def __init__(self,av_model='elexon',):
+        """Initialise bzOutageGenerator class.
+        
+        Options for the av_model are:
+        - 'elexon', based on the LOLP methodology Table 4;
+        - 'ecr', based on the monthly mean values from the ECRs;
+        - 'flat', all values are trivially unity;
+        - None, uses 'elexon'.
+        
+        """
+        self.set_avlbty(av_model,)
+        self.getGeneratorPortfolios()
     
     @staticmethod
     def build_avail_matrix(trn_avl,lt_avl,ng,nt,):
@@ -957,6 +967,9 @@ class bzOutageGenerator():
          
         Uses the geometric function to simulate the number of transitions to 
         failure/repair.
+        
+        Some of this is partially based on the Chapter 10 of Billinton and 
+        Allan's "Reliability Evaluation of Engineering Systems", 2nd edition.
         
         Inputs
         ---
@@ -994,4 +1007,161 @@ class bzOutageGenerator():
         avl = avl[:,n0:nt+n0].tocsc()
         
         return avl, ttf, ttr
+        
+    @staticmethod
+    def clean_inPrdData(data):
+        """Clean the installed production data matrix downloaded from ENTSOe.
+        
+        """
+        # First strip the first column
+        data = [r[1:] for r in data]
+        
+        # Then go through and replace empty columns with NaNs
+        dc = np.zeros((len(data),len(data[0])))
+        for i,r in enumerate(data):
+            for j,v in enumerate(r):
+                # n/e, N/A as not expecting, not applicable
+                dc[i,j] = np.nan if v in ['n/e','N/A'] else float(v)
+        return dc
     
+        
+    def set_avlbty(self,av_model=None,):
+        """Set the availability model. See help(self.__init__) for options."""
+        if av_model=='elexon':
+            self.avlbty = avlbty_elexon
+            self.cnvtr = cnvtr_elexon
+        elif av_model in ['ecr',None]:
+            self.avlbty = avlbty_ecr
+            self.cnvtr = cnvtr_ecr
+        elif av_model=='flat':
+            self.avlbty = avlbty_flat
+            self.cnvtr = cnvtr_flat
+    
+    def getGeneratorPortfolios(self,):
+        """Get the generator portfolios for all countries using entsoe.
+        
+        For most of these, self._.ccs lists the countries present for 
+        iterating over.
+        
+        Sets
+        ---
+        - self.nseInPrd, a Bunch with entsoe total generation data,
+        - self.nsePng, the entsoe production & generation countries,
+        - self.fleets, the fleet, built using the previous two datasets.
+        
+        """
+        # First load the totals for each country
+        listEq = lambda ll: all([ll[0]==l for l in ll])
+        
+        dn0 = r'D:\codeD\supergenCode\clearheads-entsoe'
+        dn = os.path.join(dn0,'entsoeData','installed_prod')
+        # dn = os.path.join(fn_root,'entsoeData','installed_prod')  # <----
+        
+        hs = []; rs = []
+        self.nseInPrd = Bunch()
+        self.nseInPrd.ccs = []
+        for fn in os.listdir(dn):
+            cc = fn.split('_')[0]
+            head,data = csvIn(os.path.join(dn,fn))
+            hs.append(head)
+            rs.append([d[0] for d in data])
+            self.nseInPrd[cc] = bzOutageGenerator.clean_inPrdData(data)
+            self.nseInPrd['ccs'].append(cc)
+        
+        if not (listEq(hs) and listEq(rs)):
+            raise Exception('List row headings and column headings not equal!')
+        
+        self.nseInPrd.h = [int(h[:4]) for h in hs[0][1:]]
+        self.nseInPrd.r = rs[0]
+        
+        # Then load the production and generation, based on fig_pngUnits
+        # NB: we only use the Dec 2020 data for now as it seems units are
+        # not taken off.
+        self.nsePng = Bunch()
+        self.fleets = Bunch()
+        pngHeads = odict({
+                       'mRID':str,
+                       'name':str,
+                       'nomP':float,
+                       'impl_date':s2m,
+                       })
+        self.nsePng.head = list(pngHeads.keys())
+        
+        # self.nsePng.ccs = os.listdir(os.path.join(sd,'png')) # TO DO!
+        self.nsePng.ccs = ['GB','IE','I0','FR','BE','NL',]
+        
+        for cc in self.nsePng.ccs:
+            self.nsePng[cc] = {}
+            head,data = csvIn(os.path.join(fn_root,'entsoeData','png',
+                                            cc,f'png_{cc}_2020-12-01.csv'))
+            for kk,pmap in PSRTYPE_MAPPINGS.items():
+                d_pmap = [d for d in data if (d[head.index('psrType')]==kk)]
+                self.nsePng[cc][pmap] = [[vf(r[head.index(k)]) 
+                               for k,vf in pngHeads.items()] for r in d_pmap]
+            
+        self.fleets.ccs = ['GB','IE','FR','BE','NL',]
+        for cc in self.fleets.ccs:
+            self.fleets[cc] = self.getGenFleets(cc)
+        
+    @staticmethod
+    def pwr2fleet(ppwrs,val):
+        """Convert list of powers ppwrs to a fleet of size val."""
+        isel = np.argmax(np.cumsum(ppwrs)>val)
+        gen_sub = val - sum(ppwrs[:isel])
+        return np.r_[ppwrs[:isel],gen_sub]
+    
+    def getGenFleets(self,cc,vbs=False,):
+        """Get the generator fleets using the LILO method for system cc."""
+        
+        # Get the nseInPrd table andlist of generators
+        cc_tbl = self.nseInPrd[cc]
+        rr = self.nseInPrd.r[:-1] # ignore Total Grand Capacity
+        gens = self.nsePng[cc]
+        
+        # indexes and dates
+        idate,ipwr = [self.nsePng.head.index(vv) 
+                                            for vv in ['impl_date','nomP']]
+        fleets = {yr:mtDict(rr) for yr in self.nseInPrd.h}
+        for j,yr in enumerate(self.nseInPrd.h):
+            for i,r in enumerate(rr):
+                if cc_tbl[i,j]>0 and len(gens[r])>0:
+                    # evaluate if gens existed at the start of the yr
+                    igensel = [i for i,g in enumerate(gens[r]) 
+                                                    if g[idate].year<yr]
+                    igenout = [i for i in range(len(gens[r])) 
+                                                    if i not in igensel]
+                    gensr_ = np.array(gens[r])
+                    
+                    # get backwards/forward date orders for igensel/igenout
+                    isrt = np.argsort([gensr_[ii,idate] 
+                                                    for ii in igensel])[::-1] 
+                    isrt_out = np.argsort([gensr_[ii,idate] for ii in igenout])
+                    
+                    pwrs = gensr_[igensel][isrt][:,ipwr].astype(float)
+                    pwrs_out = gensr_[igenout][isrt_out][:,ipwr].astype(float)
+                    pwrs_all = np.r_[pwrs,pwrs_out]
+                    
+                    if sum(pwrs)>cc_tbl[i,j]:
+                        # If there are sufficient generators, 
+                        # then pick the most recent:
+                        fleets[yr][r] = self.pwr2fleet(pwrs,cc_tbl[i,j])
+                    elif sum(pwrs_all)>cc_tbl[i,j]:
+                        # If there are not but the total works, then go forward
+                        fleets[yr][r] = self.pwr2fleet(pwrs_all,cc_tbl[i,j])
+                    elif sum(pwrs_all)!=0:
+                        nrot = int(cc_tbl[i,j]//sum(pwrs_all) + 1)
+                        pwrs_aug = np.concatenate([pwrs_all]*nrot)
+                        fleets[yr][r] = self.pwr2fleet(pwrs_aug,cc_tbl[i,j])
+                    else:
+                        if vbs:
+                            print(sum(pwrs_all),yr,r)
+                        
+                        raise Exception('not yet implemented')
+                elif cc_tbl[i,j]>0 and len(gens[r])==0:
+                    if vbs:
+                        print(
+                           f'No data for {cc}, {yr}, {r}, ({cc_tbl[i,j,]} MW)')
+                    fleets[yr][r] = cc_tbl[i,j]
+        return fleets
+
+

@@ -35,6 +35,8 @@ sf = 0
 rerun = 0
 cc = 'GB' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR'
 
+self = eomf.bzOutageGenerator()
+
 # Load the data and get the clock & keys
 APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
 

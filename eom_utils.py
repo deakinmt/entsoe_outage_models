@@ -22,8 +22,6 @@ from matplotlib import cm
 from cmocean import cm as cmo
 from hsluv import hsluv_to_rgb
 
-# A useful set of directories for saving/loading data from etc
-fd = os.path.dirname(__file__)
 
 # run exec(repl_import) to import a set of standard funcs from here
 repl_list = """from eom_utils import es, csvIn, ppd, oss, tlps, saveFigFunc,\
@@ -34,9 +32,16 @@ repl_list = """from eom_utils import es, csvIn, ppd, oss, tlps, saveFigFunc,\
 
 pound = u'\u00A3'
 npa = np.array
+
+# A useful set of directories for saving/loading data from etc
 fn_call = sys.argv[0].replace('/','\\').lower()
 scriptCallingName = fn_call.split('\\')[-1].split('.')[0]
-fn_root = os.path.dirname(fn_call)
+if '__file__' in dir():
+    fd = os.path.dirname(__file__)
+else:
+    fd = os.path.dirname(fn_call)
+
+fn_root = fd
 
 es = "exec( open(r'"+fn_call+"').read() )"
 gDir = os.path.join(fn_root,'gallery',scriptCallingName)
