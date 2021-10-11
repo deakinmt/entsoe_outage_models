@@ -1030,6 +1030,11 @@ class bzOutageGenerator():
                 # <-- alternative method
                 # AA.append(self.build_unavl_matrix(
                             # self.trn_avl[k__],self.avlbty[k_],ng,nt))
+            
+            # Also set the index of generators that have non-zero unavailability
+            unavl[cc]['isel'] = np.where(
+                        np.not_equal(np.nansum(unavl[cc]['ua'],axis=1),0))[0]
+        
         if assign:
             self.unavl = unavl
         else:
