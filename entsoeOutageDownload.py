@@ -10,7 +10,7 @@ from download_config import dstart, dend, dstart_xtra, dend_xtra, dT
 
 codes = getCodes('CH') # change this to change how much data is downloaded
 codes = getCodes(['GB', 'IE', 'BE', 'NL', 'I0', 'FR','DK-1', 'DK-2', 
-                            'NO-1', 'NO-2', 'NO-3', 'NO-4', 'NO-5',])
+                    'NO-1', 'NO-2', 'NO-3', 'NO-4', 'NO-5', 'DE', 'ES',])
 
 sdOut_ = os.path.join(sd,'outage_data')
 

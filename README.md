@@ -6,11 +6,16 @@ based on NW European countries.
 ===
 TO DO
 ---
-- how to most suitably load in the installed production data
-# dn = os.path.join(fn_root,'entsoeData','installed_prod')  # <---- eom_funcs
-- 
-===
+[ ] how to most suitably load in the installed production data
+[ ] check we have all countries 
+[ ] check if vvmult should be used
+[ ] checksums on all country outputs
+[ ] exploring the errors in GB data
+[ ] saving the output data for re-use
+[ ] exploring the min-max errors
 
+
+===
 
 In general, the scripts use options to select what to run - e.g.,
 entsoeOutageDownload.py line  17-24 can be changed from 0 to 1
@@ -28,6 +33,17 @@ download_config.py - various information for changing download options,
     including the token used to call the API.
 entsoeProductionDownload.py - A script to downnload production and 
     generation units
+
+
+Workflow
+---
+It is suggested that the data is approached in the following way:
+1. The outage data for individual countries is download from 
+  entsoeOutageDownload.py, using download_config.py.
+2. The production and generation units are downloaded from
+  entsoeProductionDownload.py.
+3. The data is then explored using the options in entsoeOutage.py.
+
 
 
 Directories

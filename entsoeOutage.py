@@ -13,7 +13,7 @@ from scipy import sparse
 from eom_utils import aMulBsp
 
 # Select the countries to use
-ccs = ['GB', 'IE', 'I0', 'BE', 'NL', 'FR']
+ccs = ['GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'DK', 'ES', 'NO', 'DE',]
 
 # Process the data to create the 
 process_APs = 0
@@ -28,13 +28,14 @@ fig_hydro = 0
 # Misc figures
 pltTsGenerator = 0
 pltTsCcWinters = 0
+pltOutageChanges = 0
 
 # Save figure flag
 sf = 0
 
 # Script options
 rerun = 0
-cc = 'GB' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR'
+cc = 'GB' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'ES', 'DK', 'DE',
 av_model = 'ecr'
 
 # Load the data and get the clock & keys
@@ -42,24 +43,49 @@ APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
 self = eomf.bzOutageGenerator(av_model=av_model,)
 
     
+if pltOutageChanges:
+    drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(ds,de,'GB',sd,rerun=False)
+    for xx,nm in zip([dpsF,dpsF + dpsP],['Forced','Total',]):
+        dpss = [self.getWinters(sctXt(t=drange,x=xx),yrStt=yr,nYr=1,) 
+                                                    for yr in range(2016,2021)]
+        
+        qntl = 1 - (1/24)
+        hist_bins = np.arange(-4050,4050,100)
+        for ii in [1,2,4,6,12,18,24,]:
+            dF = np.concatenate([dps.x[ii:] - dps.x[:-ii] for dps in dpss])
+            qq = np.nanquantile(dF,qntl)
+            plt.hist(dF,bins=hist_bins,histtype='step',
+                                        label=f'{ii} hr ({qq:.0f} MW)', lw=0.9)
+        
+        plt.xlabel(
+            'Power difference, MW (+ve: future \nhour greater outage than now)')
+        plt.ylabel('Count',)
+        plt.title(f'Changes in {nm} Outages, GB Winters 16/17-20/21')
+        plt.legend(title=f'Hour difference\n({qntl:.2%} quantile)',
+                                                        fontsize='small',)
+        if sf:
+            sff(f'pltOutageChanges_{nm}')
+        
+        tlps()
+
 if process_APs:
     for cc in ccs:
         APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=True,save=True)
 
 if process_DPs:
     for cc in ccs:
-        drange, dpsF, dpsP = eomf.load_dps(
+        drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
                                     ds,de,cc,sd,rerun=True,save=True)
 
 if fig_entsoePs:
     for cc in ccs:
-        drange,dpsF,dpsP = eomf.load_dps(ds,de,cc,sd,rerun=False)
+        drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(ds,de,cc,sd,rerun=False)
         dps = dpsF + dpsP
-        
+
         nanPlot = np.nan*np.ones(len(drange))
         nanPlot[np.where(np.isnan(dps))[0]] = 0
         ylms = (-500,max(dps)*1.15)
-        
+
         fig, ax = plt.subplots(figsize=(9,3.2))
         plt.plot_date(drange,dpsP,'-',label='Planned',)
         plt.plot_date(drange,dpsF,'-',label='Forced',)
@@ -73,13 +99,13 @@ if fig_entsoePs:
         for yr in range(min(drange).year,max(drange).year+1):
             plt.vlines([datetime(yr,11,eomf.get_nov_day(yr)) + timedelta(td) 
                                 for td in [0,20*7]],*ylms,linestyles='dashed')
-        
+
         ylm = plt.ylim(ylms)
         plt.ylim()
         tl()
         if sf:
             sff(f'fig_entsoePs_{cc}',sd_mod='fig_entsoePs',)
-        
+
         tlps()
 
 if fig_entsoeout:

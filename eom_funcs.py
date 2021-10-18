@@ -179,7 +179,7 @@ def getCodes(cds=None):
         cds = ['NO-2','DK-1','NL','FR','BE','IE','GB','I0']
     elif cds=='CH':
         cds = ['NO-1','NO-2','NO-3','NO-4','NO-5',
-                    'DK-1','DK-2','NL','FR','BE','IE','GB','I0','DE',]
+                    'DK-1','DK-2','NL','FR','BE','IE','GB','I0','DE','DE18',]
     
     codes = {key:BIDDING_ZONES[key] for key in cds}
     return codes
@@ -393,21 +393,31 @@ class ETnse(ET.Element,):
             return ETnse(rootfind)
 
 def check_ssend_flg(stts,ends):
-    return all([e<=s for s,e in zip(stts[1:],ends[:-1])])
+    """Check the starts are aligned, then if the starts/ends overlap."""
+    if not all([s0<=s1 for s0,s1 in zip(stts[:-1],stts[1:])]):
+        return False
+    else:
+        return all([e<=s for s,e in zip(stts[1:],ends[:-1])])
 
 def contiguous_duplicates(stts,ends,vals,nomps,dlo,dhi,):
     """Create a contiguous equivalent when there is a stepped curve.
     
+    Approach:
+    - between dlo and dhi, mark all of the datetimes between stts and ends
+    - between stt and end, value at 'val', otherwise at 'nomps'
+    - If end[i]=stt[i+1], then the value of 'd' will simply be repeated.
+    
     Inputs
     ---
     stts, ends - start & end times
-    vals - 
+    vals - the power values between start and end times
     nomps - the nominal power of the device
     
     Returns
     ---
-    vvm - set equal to one, as all info captured in vvl
-    vvl - 
+    dd - the datetimes
+    pp - the powers
+    vvl - the equivalent loading level, in units of vals/nomps
     
     """
     if not check_ssend_flg(stts,ends):
@@ -416,37 +426,50 @@ def contiguous_duplicates(stts,ends,vals,nomps,dlo,dhi,):
     
     dt = dhi - dlo
     
-    # The initial dd, pp
-    dd = [(dlo,max(dlo,stts[0]))]
-    pp = [nomps[-1]]
+    # Tidied up
+    pp = [nomps] + [p for v in vals for p in [v,nomps]] + [nomps]
     
-    # Add the first point manually
-    dd.append((max(dlo,stts[0]),ends[0]))
-    pp.append(vals[0])
-    dd.append((ends[0],stts[1]))
-    pp.append(nomps[-1])
+    # Build the datetimes the powers are at
+    stts_ = [dlo, max(dlo,stts[0]) ] + stts[1:] + [min(ends[-1],dhi)]
+    ends_ = [max(dlo,stts[0])] + ends[:-1] + [min(ends[-1],dhi), dhi]
+    dd = [d for i in range(len(stts)+1) for d in [(stts_[i],ends_[i]),
+                                                  (ends_[i],stts_[i+1])]]
     
-    # Add the intermediate points
-    for i in range(1,len(stts)-1):
-        pp.append(vals[i])
-        dd.append((stts[i],ends[i]))
-        pp.append(nomps[-1])
-        dd.append((ends[i],stts[i+1]))
+    return dd, pp, (o2o(np.diff(dd))/dt).dot(pp)
+
+def minmax_reconciliation(stts,ends,vals,nomps,dlo,dhi,):
+    """Find the maximum and minimum possible availabilities of generators.
     
-    # Add the final point manually
-    pp.append(vals[-1])
-    dd.append((stts[-1],min(ends[-1],dhi)))
-    pp.append(nomps[-1])
-    dd.append((min(ends[-1],dhi),dhi))
+    Used when other methods have failed.
     
-    return 1.0, (o2o(np.diff(dd))/dt).dot(pp)
+    NB: assumes one minute time resolution.
+    """
+    dt = timedelta(0,60,)
+    nt = (dhi-dlo)//dt
+    
+    vmat = np.nan*np.ones((len(stts),nt,))
+    i0s = [max(0,            (s-dlo)//dt) for s in stts]
+    i1s = [min((dhi-dlo)//dt,(s-dlo)//dt) for s in ends]
+    
+    # Assign the values to vmat
+    _ = [vmat[ii].__setitem__(slice(i0,i1),v) 
+                        for ii,(i0,i1,v) in enumerate(zip(i0s,i1s,vals))]
+    
+    # Create the max and min versions of the output
+    vmax, vmin = [np.nanmin(np.c_[np.ones(nt)*nomps, mnmx(vmat,axis=0)],axis=1)
+                                        for mnmx in [np.nanmax,np.nanmin]]
+    
+    return np.mean(vmax), np.mean(vmin)
 
 def load_aps(cc,sd,rerun=True,save=False,):
     """Load the availability periods list APs for country cc.
     
     Is quite slow unfortunately.
     
-    WARNING - at the moment probably WONT work with DK-1 (etc)
+    Method:
+    - Initialise a dict for storing the information (APs)
+    - Read each entry of the zipped XML data
+    - Append each generator with an outage to the relevant date
     
     Inputs
     ---
@@ -475,7 +498,6 @@ def load_aps(cc,sd,rerun=True,save=False,):
         return data['APs'], data['mm'], data['kks'], data['kksD']
     
     t0 = timer()
-    print(f'Loading {cc} APs...')
     ap2clk = lambda ap,ss: datetime.fromisoformat(
             ap.find('timeInterval').find(ss).text.replace('Z',':00'))
     
@@ -484,8 +506,10 @@ def load_aps(cc,sd,rerun=True,save=False,):
     # period, the data is saved.
     mm = {} # mRIDmaster dict
     
+    print(f'Loading {cc} APs...')
     APs = {} # each file
     for fn in get_path_files(os.path.join(ld_,cc)):
+        # This finds the dict key as the date
         kk = fn.split('_')[-3]
         
         # If not existing yet, add new one.
@@ -494,9 +518,10 @@ def load_aps(cc,sd,rerun=True,save=False,):
         
         with zipfile.ZipFile(fn, 'r') as zip_ref:
             for zr in zip_ref.infolist():
+                # Get an XML representation of the entry
                 root = ET.XML(zip_ref.read(zr))
                 rr = ETnse(root)
-                ts = rr.find('TimeSeries') # only ever one (it seems for now!)
+                ts = rr.find('TimeSeries')
                 aps = ts.findall('Available_Period')
                 
                 # Update mm
@@ -532,6 +557,7 @@ def load_aps(cc,sd,rerun=True,save=False,):
                    )
     print(f'APs for {cc} loaded.')
     
+    # Build a linearly increasing clock and dates
     kksD = np.sort(np.array([s2d(kk) for kk in APs.keys()]))
     kks = [d2s(kk) for kk in kksD]
     
@@ -553,7 +579,10 @@ def load_aps(cc,sd,rerun=True,save=False,):
 def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
     """Block process the APs to find the dps values for each country.
     
-    Inputs: see help(eomf.load_aps) for inputs
+    Inputs: see help(eomf.load_aps) for inputs / help(eomf.block_process_aps)
+    
+    The bulk of the work is done by "block_process_aps" which, in-turn, 
+    calls "process_aps" for each of the hourly time periods.
     
     Returns
     ---
@@ -570,12 +599,13 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
         with open(fn_,'rb') as file:
             data = pickle.load(file)
         print(data['readme'])
-        return data['drange'], data['dpsF'], data['dpsP']
+        return [data[k] for k in ['drange','dpsF','dpsP','dpsFx','dpsPx']]
     
     t0 = timer()
     print(f'========== Processing {cc} APs...')
     APs, mm, kks, kksD = load_aps(cc,sd,rerun=False,save=False)
-    drange,dpsF,dpsP = block_process_aps(dstart,dend,kksD,APs,mm,kks)
+    drange,dpsF,dpsP,dpsFx,dpsPx \
+                = block_process_aps(dstart,dend,kksD,APs,mm,kks,)
     
     if save:
         nl = '\n'
@@ -586,18 +616,38 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
         
         with open(fn_,'wb') as file:
             pickle.dump({'drange':drange,'dpsF':dpsF,'dpsP':dpsP,
-                                                'readme':readme},file)
+                        'dpsFx':dpsFx,'dpsPx':dpsPx,'readme':readme},file)
     
-    return drange,dpsF,dpsP
+    return drange,dpsF,dpsP,dpsFx,dpsPx
 
 def process_aps(APsK,dlo,dhi,mm):
     """Use APs to find the forced and unforced outages.
     
+    This is the core of the method for determining country-level outages.
+    
+    Approach.
+    ---
+    -> First, remove any reports which do not have good doc status ('A09' - 
+        see [1], 'A.8. DocStatus'), 
+    -> All other reports are put into a single list of triplets, containing
+        info on (mrid, APs report no, data no).
+    -> All generators which only have a single report in the given time period
+        are first processed, with the outage value calculated by taking the
+        difference between the mrid's nominal power and the power at that time.
+        -> Note: in these cases, the outage value is taken as an average (see
+            get_vm0) - e.g., if the outage is at 0% for 15 mins of an hour, but
+            is otherwise available, then this is counted as 75%.
+    -> Generators which do not have just one outage are then processed:
+        -> For these we calculate the minimum and maximum possible outages that
+            could have occured, which goes into vvx.
+    
     Inputs
     ---
-    APsK - availabilities dict value that will be used from dlo to dhi
-    dlo - the start time (inclusive)
-    dhi - the end time (exclusive)
+    APsK - availabilities dict value that will be used from dlo to dhi. Is
+            the 'kth' item of an APs dict [which, may have only planned or 
+            forced outages, dependent on usage].
+    dlo - the start time
+    dhi - the end time
     mm - the dict of generator data
     
     Outputs [I think these are not independent...?]
@@ -605,12 +655,15 @@ def process_aps(APsK,dlo,dhi,mm):
     vvmult - a list of multipliers (1 if outage during whole period)
     vvals - the value reported in the entsoe files
     nomps - the corresponding nominal power
+    vvx - additional outages when there are clashes.
+    
+    [1] https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html . Accessed 18/10/21
     
     """
     # dhi = dlo+timedelta(0,1800) if dhi is None else dhi
     mmRdr = list(APsK.keys())
 
-    # First, pull out all of the possibilities:
+    # First, pull out all of data into a list (if the docStatus + dates are ok)
     ap_out = []
     for i,m in enumerate(mmRdr):
         for j,aps in enumerate(APsK[m]):
@@ -619,11 +672,10 @@ def process_aps(APsK,dlo,dhi,mm):
                     if (dhi>dd['start'] and dlo<dd['end']):
                         ap_out.append([m,j,k,])
     
-    # m,j,k: mRID, 
+    # m,j,k: mRID, aps item no., report data idx
+    aps_mj = lambda m,j:     APsK[m][j]
     get_data = lambda m,j,k: APsK[m][j]['data'][k]
-    get_nomP = lambda m,j,k: APsK[m][j]
-    get_cd = lambda m,j,k: APsK[m][j]['createdDateTime']
-    get_vm0 = lambda m,j,k: (get_data(m,j,k)['end'] - dlo)/(dhi - dlo)
+    get_vm0 = lambda m,j,k: min((get_data(m,j,k)['end'] - dlo)/(dhi - dlo),1)
     nom2float = lambda nomP: 0 if nomP is None else float(nomP)
     # nom2float = lambda nomP: np.nan if nomP is None else float(nomP)
     
@@ -633,66 +685,55 @@ def process_aps(APsK,dlo,dhi,mm):
     mm_nunq = list(set([m_ for m_ in mmsel if mmsel.count(m_)!=1]))
 
     # Get the time multiplier, nom power, and AP value
-    vvmult = [min(get_vm0(*ap_out[i]),1) for i in unq_idxs]
+    vvmult = [get_vm0(*ap_out[i]) for i in unq_idxs]
     vvals = [get_data(*ap_out[i])['val'] for i in unq_idxs]
     nomps = [nom2float(mm[mmsel[i]]['nomP']) for i in unq_idxs]
-
+    vvx = [0]*len(unq_idxs)
+    
     # Deal with any duplicates
     for nunq in mm_nunq:
+        # First, pull out the indexes in ap_out and nominal power
         idxs = [i for i,a_ in enumerate(ap_out) if a_[0]==nunq]
-        
-        chgs = [APsK[ap_out[i][0]][ap_out[i][1]]['changes'] for i in idxs]
-        
-        vals = [get_data(*ap_out[i])['val'] for i in idxs]
-        stts = [get_data(*ap_out[i])['start'] for i in idxs]
-        ends = [get_data(*ap_out[i])['end'] for i in idxs]
-        ssend_flg = check_ssend_flg(stts,ends)
-        
-        mults = [min(get_vm0(*ap_out[i]),1) for i in idxs]
-        cds = [get_cd(*ap_out[i]) for i in idxs]
         nomps.append(nom2float(mm[mmsel[idxs[0]]]['nomP']))
+        
+        # Then, create lists of the data used to create the value:
+        vals, stts, ends = [[get_data(*ap_out[i])[kk] for i in idxs]
+                                        for kk in ['val','start','end']]
+        mults = [get_vm0(*ap_out[i]) for i in idxs]
+        cds  = [aps_mj(*ap_out[i][:2])['createdDateTime'] for i in idxs]
+        chgs = [aps_mj(*ap_out[i][:2])['changes'] for i in idxs]
+        
+        # Check if the starts and ends 'line up'
+        ssend_flg = check_ssend_flg(stts,ends)
         
         if len(set(vals))==1 and len(set(mults))==1:
             # First, if all values the same and length no ambiguity
             idx = 0
-            vvmult.append(min(get_vm0(*ap_out[idxs[idx]]),1))
+            vvmult.append(get_vm0(*ap_out[idxs[idx]]))
             vvals.append(get_data(*ap_out[idxs[idx]])['val'])
-        elif len(set(mults))==1:
-            # Then, if the mults are all identical, choose most recent
-            idx = cds.index(max(cds))
-            vvmult.append(min(get_vm0(*ap_out[idxs[idx]]),1))
-            vvals.append(get_data(*ap_out[idxs[idx]])['val'])
-        elif len(set(cds))==1 and len(set(vals))==1:
-            # Then, if there is only one date, combine to one
-            vvmult.append(sum(mults))
-            vvals.append(vals[0])
+            vvx.append(0)
         elif ssend_flg:
-            # If the starts & ends are contiguous, stitch together:
-            vvm,vvl = contiguous_duplicates(stts,ends,vals,nomps,dlo,dhi)
-            vvmult.append(vvm)
+            # If the starts & ends are contiguous, no ambiguity:
+            vvl = contiguous_duplicates(stts,ends,vals,nomps[-1],dlo,dhi)[2]
+            vvmult.append(1)
             vvals.append(vvl)
-        elif not all(chgs) and any(chgs):
-            # If mix of chgs and planned, try with continuous/just adding
-            f = lambda xx: [x for x,c in zip(xx,chgs) if c]
-            if sum(chgs)==1:
-                vvm = min(get_vm0(*ap_out[f(idxs)[0]]),1)
-                vvl = get_data(*ap_out[f(idxs)[0]])['val']
-            else:
-                vvm,vvl = contiguous_duplicates(f(stts),f(ends),f(vals),
-                                                            nomps,dlo,dhi)
-            vvmult.append(vvm)
-            vvals.append(vvl)
+            vvx.append(0)
+        elif len(set(mults))==1:
+            # Then, if the mults are all identical, choose most recent val
+            idx = cds.index(max(cds))
+            vvmult.append(get_vm0(*ap_out[idxs[idx]]))
+            vvals.append(get_data(*ap_out[idxs[idx]])['val'])
+            vvx.append(0)
         else:
-            # Otherwise, complain!
-            vvmult.append(np.nan)
-            vvals.append(np.nan)
-            print('A clash in the non-unique APs!')
-            print(nunq,vals,len(set(cds)),dlo,)
-            print(chgs)
+            # Finally, if still no good, then find max / min outage rates
+            mx, mn = minmax_reconciliation(stts,ends,vals,nomps[-1],dlo,dhi)
+            vvmult.append(1)
+            vvals.append(mx)
+            vvx.append(mx-mn)
+    
+    return vvmult,vvals,nomps,vvx
 
-    return vvmult,vvals,nomps
-
-def block_process_aps(dstart,dend,kksD,APs,mm,kks):
+def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
     """Block process the APs for a range of dates at half-hourly timesteps.
     
     Inputs
@@ -705,7 +746,9 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks):
     - drange - datetimes
     - dpsF - forced outages time series
     - dpsP - planned outages time series
+    - dpsFx, dpsPx - as above, but the max diff. due to ambiguous outage data
     """
+    # Build the clocks
     drange = np.arange(dstart,dend,timedelta(0,3600),dtype=object)
     dr_pair = np.c_[drange,np.r_[drange[1:],dend]]
     
@@ -715,15 +758,30 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks):
     APsF = {kk:{k:[v for v in d if v['businessType']=='A54'] 
                         for k,d in dd.items()} for kk,dd in APs.items()}
     
-    dpsF,dpsP = [np.zeros(len(drange)) for i in range(2)]
-    for i,(dlo,dhi) in enumerate(dr_pair):
-        isel_kk = np.argmin(np.abs((dlo-kksD)//timedelta(1)))
-        for aps,dps in zip([APsF,APsP],[dpsF,dpsP]):
-            vvmult,vvals,nomps = process_aps(aps[kks[isel_kk]],dlo,dhi,mm)
-            dp = np.array(nomps) - np.array(vvals)
-            dps[i] = sum(dp)
+    dpsF,dpsP,dpsFx,dpsPx = [np.zeros(len(drange)) for i in range(4)]
     
-    return drange, dpsF, dpsP
+    with Bar('Process APs', suffix='%(percent).1f%% - %(eta)ds',
+                                                    max=len(dr_pair)) as bar:
+        for i,(dlo,dhi) in enumerate(dr_pair):
+            # First check there is data for the period
+            clk_i = np.abs((dlo-kksD)//timedelta(1))
+            if sum(clk_i==0)<1:
+                print(f'No data for {dlo} (i = {i}). leaving as zero.\n')
+                continue
+            
+            # If there is, pull out the data for that date.
+            isel_kk = np.argmin(clk_i)
+            for aps,dps,dpsX in zip([APsF,APsP],[dpsF,dpsP],[dpsFx,dpsPx]):
+                vvmult,vvals,nomps,vvx = \
+                                process_aps(aps[kks[isel_kk]],dlo,dhi,mm)
+                
+                # Calculate the output
+                # ---> does vvmult come in somewhere?
+                dps[i] = sum(npa(nomps) - npa(vvals))
+                dpsX[i] = sum(vvx)
+            bar.next()
+    
+    return drange, dpsF, dpsP, dpsFx, dpsPx
 
 # Force the dict order
 genXmlData = odict({
@@ -1039,6 +1097,85 @@ class bzOutageGenerator():
             self.unavl = unavl
         else:
             return unavl
+    
+    @staticmethod
+    def getWinters(dataIn,yrStt=2014,nYr=6,mode='f',vrbl=None):
+        """ Get winter data for the structure passed in.
+        
+        Returns a sctXt object with a new timeseries.
+        
+        'dataIn' should either be:
+        - an sctXt object, or
+        - an object with a '__getitem__', and 'vrbl' should be passed in.
+        
+        'mode' can be either:
+        - 'f' [full]: all winter days (20 weeks from 1st Sunday of Nov)
+        - 'X' [without Xmas]: without 14 days of Christmas
+        - 'A' [all]: start on 1st Jan and go for nYr years
+        - 'djf'/'mam',/'jja'/'son': month triplets. 
+                                    NB: djf goes from current to next yr.
+        
+        """
+        # Get the 1st Sunday of Nov and 20 weeks after that
+        dtsStt = []
+        dtsEnd = []
+        for i in range(nYr):
+            novDate = get_nov_day(yrStt+i)
+            dtsStt.append( datetime(yrStt+i,11,novDate) )
+            dtsEnd.append( dtsStt[-1] + timedelta(7*20) )
+
+        if mode=='X':
+            # Get the Christmas dates (following Wilson PMAPS 2018)
+            xmasStt = []
+            xmasEnd = []
+            for i in range(nYr):
+                if dtsStt[i].day==7:
+                    dWk = 6
+                else:
+                    dWk = 7
+                xmasStt.append(dtsStt[i] + timedelta(dWk*7))
+                xmasEnd.append(dtsStt[i] + timedelta((dWk+2)*7))
+        
+        
+        # Stick these together into an array and find the indexes
+        if mode=='f':
+            dates = np.array([dtsStt,dtsEnd]).T
+        elif mode=='X':
+            dates = np.array([dtsStt,xmasStt,xmasEnd,dtsEnd]).T
+        elif mode=='A':
+            dates = np.array([[datetime(yrStt,1,1,)],
+                             [datetime(yrStt+nYr,1,1,)]]).T
+        elif mode in ['djf','mam','jja','son']:
+            mos = {'djf':[12,3],'mam':[3,6],'jja':[6,9],'son':[9,12],}
+            dY1 = 1 if mode=='djf' else 0
+            dates = []
+            for ii in range(nYr):
+                dates.append([datetime(yrStt+ii,mos[mode][0],1),
+                              datetime(yrStt+ii+dY1,mos[mode][1],1)])
+            
+            dates = np.array(dates)
+        
+        
+        idxs = np.searchsorted(dataIn.t,dates)
+        
+        # Pull out the variables of interest between those index pairs.
+        if vrbl is None:
+            xx = dataIn.x
+        else:
+            xx = dataIn[vrbl]
+        
+        if xx.ndim==2:
+            data = np.zeros((0,xx.shape[1],),dtype=float,)
+        else:
+            data = np.array([],dtype=float,)
+        
+        tms = np.array([],dtype=object)
+        for idx_ in idxs:
+            for i0,i1 in zip(idx_[::2],idx_[1::2]):
+                data = np.r_[data,xx[i0:i1]]
+                tms = np.r_[tms,dataIn.t[i0:i1]]
+        
+        return sctXt(x=data,t=tms)
     
     @staticmethod
     def build_unavl_matrix(trn_avl,lt_avl,ng,nt,seed=None,):
