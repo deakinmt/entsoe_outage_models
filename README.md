@@ -13,7 +13,7 @@ TO DO
 [ ] exploring the errors in GB data
 [ ] saving the output data for re-use
 [ ] exploring the min-max errors
-
+[ ] looking at outages of only conventional plant, not renewables
 
 ===
 

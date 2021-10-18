@@ -587,8 +587,8 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
     Returns
     ---
     drange - the clock
-    dpsF - the forced outages (nominally all)
-    dpsP - the planned outages (nominally zero)
+    dpsF / dpsP - the forced / planned outages
+    dpsFx / dpsPx - the forced / planned outages max additional outages
     """
     sd_ = os.path.join(sd,'output_cache','DPs',)
     _ = os.mkdir(sd_) if not os.path.exists(sd_) else None
@@ -601,9 +601,26 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
         print(data['readme'])
         return [data[k] for k in ['drange','dpsF','dpsP','dpsFx','dpsPx']]
     
-    t0 = timer()
+    
     print(f'========== Processing {cc} APs...')
     APs, mm, kks, kksD = load_aps(cc,sd,rerun=False,save=False)
+    
+    # Load in the PNG dict for more up-to-date generator data
+    fns = [fn for fn in get_path_files(os.path.join(sd,'png',cc,))
+                                    if '2020-12-01.csv' in fn]
+    heads, datas = listT([csvIn(fn) for fn in fns])
+    assert(all([heads[0]==h for h in heads]))
+    idxM,idxP = [heads[0].index(h) for h in ['mRID','nomP']]
+    pngNomP = {d[idxM]:float(d[idxP]) for data in datas for d in data}
+    
+    # Checksum if wanted; then, update mm nomP to the new values
+    neqs = [(mm[k]['nomP'],pngNomP.get(k,-1)) for k in mm.keys() \
+                if mm[k]['nomP']!=str(int(pngNomP.get(k,-1)))]
+    _ = [mm[k].__setitem__('nomP',pngNomP.get(k,mm[k]['nomP'])) 
+                                                        for k in mm.keys()]
+    
+    # Run!
+    t0 = timer()
     drange,dpsF,dpsP,dpsFx,dpsPx \
                 = block_process_aps(dstart,dend,kksD,APs,mm,kks,)
     
@@ -620,7 +637,7 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
     
     return drange,dpsF,dpsP,dpsFx,dpsPx
 
-def process_aps(APsK,dlo,dhi,mm):
+def process_aps(APsK,dlo,dhi,mm,):
     """Use APs to find the forced and unforced outages.
     
     This is the core of the method for determining country-level outages.
@@ -676,8 +693,7 @@ def process_aps(APsK,dlo,dhi,mm):
     aps_mj = lambda m,j:     APsK[m][j]
     get_data = lambda m,j,k: APsK[m][j]['data'][k]
     get_vm0 = lambda m,j,k: min((get_data(m,j,k)['end'] - dlo)/(dhi - dlo),1)
-    nom2float = lambda nomP: 0 if nomP is None else float(nomP)
-    # nom2float = lambda nomP: np.nan if nomP is None else float(nomP)
+    nom2float = lambda nomP: np.nan if nomP is None else float(nomP)
     
     # Find unique vales and then duplicates
     mmsel = [a[0] for a in ap_out]
@@ -758,10 +774,9 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
     APsF = {kk:{k:[v for v in d if v['businessType']=='A54'] 
                         for k,d in dd.items()} for kk,dd in APs.items()}
     
-    dpsF,dpsP,dpsFx,dpsPx = [np.zeros(len(drange)) for i in range(4)]
-    
     with Bar('Process APs', suffix='%(percent).1f%% - %(eta)ds',
                                                     max=len(dr_pair)) as bar:
+        dpsF,dpsP,dpsFx,dpsPx = [np.zeros(len(drange)) for i in range(4)]
         for i,(dlo,dhi) in enumerate(dr_pair):
             # First check there is data for the period
             clk_i = np.abs((dlo-kksD)//timedelta(1))
@@ -773,12 +788,12 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
             isel_kk = np.argmin(clk_i)
             for aps,dps,dpsX in zip([APsF,APsP],[dpsF,dpsP],[dpsFx,dpsPx]):
                 vvmult,vvals,nomps,vvx = \
-                                process_aps(aps[kks[isel_kk]],dlo,dhi,mm)
+                            process_aps(aps[kks[isel_kk]],dlo,dhi,mm,)
                 
                 # Calculate the output
-                # ---> does vvmult come in somewhere?
-                dps[i] = sum(npa(nomps) - npa(vvals))
+                dps[i] = npa(vvmult).dot(npa(nomps) - npa(vvals))
                 dpsX[i] = sum(vvx)
+            
             bar.next()
     
     return drange, dpsF, dpsP, dpsFx, dpsPx
