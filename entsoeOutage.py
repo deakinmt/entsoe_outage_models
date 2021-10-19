@@ -22,6 +22,8 @@ process_DPs = 0
 # Plotting options
 fig_entsoeout = 0
 fig_entsoePs = 0
+fig_entsoePs_minmax = 0
+fig_entsoePs_ratio = 0
 fig_pngUnits = 0
 fig_hydro = 0
 
@@ -77,36 +79,50 @@ if process_DPs:
         drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
                                     ds,de,cc,sd,rerun=True,save=True)
 
-if fig_entsoePs:
+if fig_entsoePs or fig_entsoePs_minmax or fig_entsoePs_ratio:
     for cc in ccs:
         drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(ds,de,cc,sd,rerun=False)
         dps = dpsF + dpsP
-
-        nanPlot = np.nan*np.ones(len(drange))
-        nanPlot[np.where(np.isnan(dps))[0]] = 0
-        ylms = (-500,max(dps)*1.15)
-
+        dps_ = dpsF + dpsP + dpsFx + dpsPx
+        
         fig, ax = plt.subplots(figsize=(9,3.2))
-        plt.plot_date(drange,dpsP,'-',label='Planned',)
-        plt.plot_date(drange,dpsF,'-',label='Forced',)
-        plt.plot_date(drange,dps,'k--',label='Total',)
-        plt.plot_date(drange,nanPlot,'r.',ms=3)
-        plt.legend()
+        if fig_entsoePs or fig_entsoePs_minmax:
+            ylms = (-500,max(dps)*1.15)
+            if fig_entsoePs:
+                figname = f'fig_entsoePs_{cc}'
+                plt.plot_date(drange,dpsP,'-',label='Planned',lw=0.7,)
+                plt.plot_date(drange,dpsF,'-',label='Forced',lw=0.7,)
+                plt.plot_date(drange,dps,'k-',label='Total',lw=0.7,)
+            elif fig_entsoePs_minmax:
+                figname = f'fig_entsoePs_minmax_{cc}'
+                plt.plot_date(drange,dps,'C0-',lw=0.7,label='Min total',)
+                plt.plot_date(drange,dps_,'C1-',lw=0.7,label='Max total',)
+            
+            plt.legend(title=f'Country: {cc}',fontsize='small',)
+            plt.ylabel('Outages, MW')
+        elif fig_entsoePs_ratio:
+            figname = f'fig_entsoePs_ratio_{cc}'
+            ylms = (-1,42.0,)
+            plt.plot_date(drange,100*(dps_ - dps)/np.mean(dps),'k-',lw=0.7,)
+            plt.title(
+                f'{cc}, RMS relative difference: {rerr(dps,dps_,p=0,):.2%}')
+            plt.ylabel("Relative difference: $\dfrac{ \mathrm{Max\,outage} - \mathrm{Min\,outage} }{ \mathrm{Mean\,outage} } $ , %")
+        
         plt.xlabel('Datetime')
-        plt.ylabel('Outages, MW')
-        plt.title(f'{cc}; No. nans: {sum(np.isnan(dps))} oo {len(dps)}')
         plt.xlim((drange[0],drange[-1]))
         for yr in range(min(drange).year,max(drange).year+1):
-            plt.vlines([datetime(yr,11,eomf.get_nov_day(yr)) + timedelta(td) 
-                                for td in [0,20*7]],*ylms,linestyles='dashed')
-
+            plt.fill_between(
+                [datetime(yr,11,eomf.get_nov_day(yr)) + timedelta(td) 
+                    for td in [0,20*7]],[ylms[0]]*2,[ylms[1]]*2,
+                                        color='k',alpha=0.1,)
+        
         ylm = plt.ylim(ylms)
-        plt.ylim()
-        tl()
         if sf:
-            sff(f'fig_entsoePs_{cc}',sd_mod='fig_entsoePs',)
+            sff(figname,sd_mod='fig_entsoePs',)
+            plt.close()
+        else:
+            tlps()
 
-        tlps()
 
 if fig_entsoeout:
     # Plotting reports from individual days

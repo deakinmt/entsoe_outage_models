@@ -507,54 +507,68 @@ def load_aps(cc,sd,rerun=True,save=False,):
     mm = {} # mRIDmaster dict
     
     print(f'Loading {cc} APs...')
+    fns = get_path_files(os.path.join(ld_,cc))
     APs = {} # each file
-    for fn in get_path_files(os.path.join(ld_,cc)):
-        # This finds the dict key as the date
-        kk = fn.split('_')[-3]
-        
-        # If not existing yet, add new one.
-        if kk not in APs.keys():
-            APs[kk] = {}
-        
-        with zipfile.ZipFile(fn, 'r') as zip_ref:
-            for zr in zip_ref.infolist():
-                # Get an XML representation of the entry
-                root = ET.XML(zip_ref.read(zr))
-                rr = ETnse(root)
-                ts = rr.find('TimeSeries')
-                aps = ts.findall('Available_Period')
+    with Bar('Load APs', suffix='%(percent).1f%% - %(eta)ds',
+                                                    max=len(fns)) as bar:
+        for fn in fns:
+            # First check the zip file is a zip file and not an error .txt
+            if not zipfile.is_zipfile(fn):
+                # Double check this is an xml text file, as expected
+                with open(fn,'r') as ff:
+                    ET.XML(ff.read())
                 
-                # Update mm
-                id = ts.find(APs0).text
-                if id not in mm.keys():
-                    mm[id] = {}
-                    for k,v in mridData.items():
-                        try:
-                            mm[id][k] = ts.find(v).text
-                        except:
-                            mm[id][k] = None
-                
-                if not (id in APs[kk].keys()):
-                    APs[kk][id] = []
-                
-                ds = None if rr.find('docStatus') is None \
-                        else rr.find('docStatus').find('value').text
-                
-                APs[kk][id].append(
-                      {
-                    'createdDateTime':datetime.fromisoformat(
-                                    rr.find('createdDateTime').text[:-1]),
-                    'docStatus':ds,
-                    'businessType':ts.find('businessType').text,
-                    'revisionNumber':int(rr.find('revisionNumber').text),
-                    'changes':'CHANGES' in zr.filename,
-                    'data':[{
-                         'start':ap2clk(ap,'start'),
-                         'end':ap2clk(ap,'end'),
-                         'val':float(ap.find('Point').find('quantity').text),
-                            } for ap in aps]
-                       }
-                   )
+                bar.next()
+                continue
+            
+            # This finds the dict key as the date
+            kk = fn.split('_')[-3]
+            
+            # If not existing yet, add new one.
+            if kk not in APs.keys():
+                APs[kk] = {}
+            
+            with zipfile.ZipFile(fn, 'r') as zip_ref:
+                for zr in zip_ref.infolist():
+                    # Get an XML representation of the entry
+                    root = ET.XML(zip_ref.read(zr))
+                    rr = ETnse(root)
+                    ts = rr.find('TimeSeries')
+                    aps = ts.findall('Available_Period')
+                    
+                    # Update mm
+                    id = ts.find(APs0).text
+                    if id not in mm.keys():
+                        mm[id] = {}
+                        for k,v in mridData.items():
+                            try:
+                                mm[id][k] = ts.find(v).text
+                            except:
+                                mm[id][k] = None
+                    
+                    if not (id in APs[kk].keys()):
+                        APs[kk][id] = []
+                    
+                    ds = None if rr.find('docStatus') is None \
+                            else rr.find('docStatus').find('value').text
+                    
+                    APs[kk][id].append(
+                        {
+                        'createdDateTime':datetime.fromisoformat(
+                                        rr.find('createdDateTime').text[:-1]),
+                        'docStatus':ds,
+                        'businessType':ts.find('businessType').text,
+                        'revisionNumber':int(rr.find('revisionNumber').text),
+                        'changes':'CHANGES' in zr.filename,
+                        'data':[{
+                            'start':ap2clk(ap,'start'),
+                            'end':ap2clk(ap,'end'),
+                            'val':float(ap.find('Point').find('quantity').text),
+                                } for ap in aps]
+                        }
+                    )
+            bar.next()
+    
     print(f'APs for {cc} loaded.')
     
     # Build a linearly increasing clock and dates
@@ -792,7 +806,7 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
                 
                 # Calculate the output
                 dps[i] = npa(vvmult).dot(npa(nomps) - npa(vvals))
-                dpsX[i] = sum(vvx)
+                dpsX[i] = sum(vvx) # vvmult = 1 for these times by construction
             
             bar.next()
     

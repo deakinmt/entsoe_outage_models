@@ -6,15 +6,18 @@ based on NW European countries.
 ===
 TO DO
 ---
-[ ] how to most suitably load in the installed production data
-[ ] check we have all countries 
-[ ] check if vvmult should be used
-[ ] checksums on all country outputs
+[ ] how to most suitably load in the require production data
+[x] check we have all countries 
+[x] check if vvmult should be used
+[x] checksums on all country outputs
+[ ] checksums on intermediate outputs (e.g., vvmult)
 [ ] exploring the errors in GB data
+[ ] exploring the negative values in the IE data
+[ ] exploring discontinuity in DE, NL data
+[ ] saving the individual generator outages sparse matrix
 [ ] saving the output data for re-use
 [ ] exploring the min-max errors
 [ ] looking at outages of only conventional plant, not renewables
-
 ===
 
 In general, the scripts use options to select what to run - e.g.,

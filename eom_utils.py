@@ -12,6 +12,7 @@ from dateutil import tz
 from time import ctime
 from bunch import *
 from collections import OrderedDict as odict
+from numpy.linalg import norm
 
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
@@ -21,7 +22,6 @@ from govuk_bank_holidays.bank_holidays import BankHolidays
 from matplotlib import cm
 from cmocean import cm as cmo
 from hsluv import hsluv_to_rgb
-
 
 # run exec(repl_import) to import a set of standard funcs from here
 repl_list = """from eom_utils import es, csvIn, ppd, oss, tlps, saveFigFunc,\
