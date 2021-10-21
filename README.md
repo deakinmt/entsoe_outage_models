@@ -15,10 +15,14 @@ TO DO
 [ ] exploring the negative values in the IE data
 [ ] exploring discontinuity in DE, NL data
 [ ] saving the individual generator outages sparse matrix
-[ ] saving the output data for re-use
-[ ] exploring the min-max errors
+[x] saving the output data for re-use
+[x] exploring the min-max errors
 [ ] looking at outages of only conventional plant, not renewables
 ===
+
+
+Notes: not clear at the moment if the data can be clearly reused:
+https://transparency.entsoe.eu/content/static_content/download?path=/Static%20content/terms%20and%20conditions/191025_List_of_Data_available_for_reuse_v2_cln.pdf
 
 In general, the scripts use options to select what to run - e.g.,
 entsoeOutageDownload.py line  17-24 can be changed from 0 to 1
