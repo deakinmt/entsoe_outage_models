@@ -10,7 +10,6 @@ from bunch import Bunch
 import xml.etree.ElementTree as ET
 from importlib import reload
 from copy import deepcopy
-from mosek.fusion import *
 from scipy import sparse
 import quantecon as qe
 
@@ -1296,12 +1295,10 @@ class bzOutageGenerator():
         - self.fleets, the fleet, built using the previous two datasets.
         
         """
-        # First load the totals for each country
         listEq = lambda ll: all([ll[0]==l for l in ll])
         
-        dn0 = r'D:\codeD\supergenCode\clearheads-entsoe'
-        dn = os.path.join(dn0,'entsoeData','installed_prod')
-        # dn = os.path.join(fn_root,'entsoeData','installed_prod')  # <----
+        # First load the totals for each country
+        dn = os.path.join(fn_root,'misc','inpr',)
         
         hs = []; rs = []
         self.nseInPrd = Bunch()
@@ -1348,7 +1345,7 @@ class bzOutageGenerator():
         self.fleets.ccs = ['GB','IE','FR','BE','NL',]
         for cc in self.fleets.ccs:
             self.fleets[cc] = self.getGenFleets(cc)
-        
+    
     @staticmethod
     def pwr2fleet(ppwrs,val):
         """Convert list of powers ppwrs to a fleet of size val."""

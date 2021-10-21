@@ -6,7 +6,7 @@ based on NW European countries.
 ===
 TO DO
 ---
-[ ] how to most suitably load in the require production data
+[x] how to most suitably load in the require production data
 [x] check we have all countries 
 [x] check if vvmult should be used
 [x] checksums on all country outputs
@@ -50,7 +50,13 @@ It is suggested that the data is approached in the following way:
 2. The production and generation units are downloaded from
   entsoeProductionDownload.py.
 3. The data is then explored using the options in entsoeOutage.py.
-
+4. If wanting to use 'true' generator sizes, then there is a manual
+  step. First, log into the online platform. Then, go to the "Installed
+  Capacity per production Type" page; select years 2015-2021 for each
+  of [BE, DE-AT-LU, DE-LU, DK-1, DK-2, FR, GB, IE, NL, NO-1, NO-2, NO-3
+  NO-4, NO-5], select export as csv. This should save the files as, e.g.,
+  "BE_Installed Capacity per Production Type_201501010000-202201010000";
+  These should then be saved in the directory .\entsoe_outage_data\misc\inpr\.
 
 
 Directories
