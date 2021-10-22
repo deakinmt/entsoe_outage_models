@@ -140,7 +140,18 @@ PSRTYPE_MAPPINGS = {
     'B21': 'AC Link',
     'B22': 'DC Link',
     'B23': 'Substation',
-    'B24': 'Transformer'}
+    'B24': 'Transformer',
+}
+
+
+# PSR types which (for purposes here) are 'intermittent'
+PSRTYPE_MAPPINGS_INTER = {
+    'B11': 'Hydro Run-of-river and poundage',
+    'B16': 'Solar',
+    'B18': 'Wind Offshore',
+    'B19': 'Wind Onshore',
+}
+
 
 DOCSTATUS = {
     'A05': 'Active',

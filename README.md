@@ -12,14 +12,15 @@ TO DO
 [x] check if vvmult should be used
 [x] checksums on all country outputs
 [ ] checksums on intermediate outputs (e.g., vvmult)
+[ ] exploring individual generator output errors (e.g., FR moF/moP ii=5)
 [ ] exploring the flat period GB Xmas 2017
 [x] exploring the errors in GB data
 [x] exploring the negative values in the IE data
 [x] exploring discontinuity in DE, NL data
-[ ] saving the individual generator outages sparse matrix
+[x] saving the individual generator outages sparse matrix
 [x] saving the output data for re-use
 [x] exploring the min-max errors
-[ ] looking at outages of only conventional plant, not renewables
+[x] looking at outages of only conventional plant, not renewables
 ===
 
 

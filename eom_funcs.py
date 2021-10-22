@@ -15,11 +15,11 @@ import quantecon as qe
 from dateutil.tz import gettz
 from pytz import country_timezones
 
-
 from eom_utils import repl_list, fn_root, data2csv, structDict, sctXt,\
         tDict2stamps, boxplotqntls, nanlt, nangt, plotEdf, cdf2qntls, rerr
 exec(repl_list)
-from entsoe_py_data import BIDDING_ZONES, PSRTYPE_MAPPINGS
+from entsoe_py_data import BIDDING_ZONES, PSRTYPE_MAPPINGS, \
+                            PSRTYPE_MAPPINGS_INTER
 from progress.bar import Bar
 
 from numpy.random import MT19937, Generator, SeedSequence
@@ -595,13 +595,15 @@ def load_aps(cc,sd,rerun=True,save=False,):
     
     return APs, mm, kks, kksD
 
-def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
+def load_dps(dstart,dend,cc,sd,rerun=True,save=False,ei=True,):
     """Block process the APs to find the dps values for each country.
     
     Inputs: see help(eomf.load_aps) for inputs / help(eomf.block_process_aps)
     
     The bulk of the work is done by "block_process_aps" which, in-turn, 
     calls "process_aps" for each of the hourly time periods.
+    
+    This also saves moF, moP. These can then be loaded using load_mouts.
     
     Returns
     ---
@@ -640,12 +642,13 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
     
     # Run!
     t0 = timer()
-    drange,dpsF,dpsP,dpsFx,dpsPx \
-                = block_process_aps(dstart,dend,kksD,APs,mm,kks,)
+    drange,dpsF,dpsP,dpsFx,dpsPx,moF,moP \
+                = block_process_aps(dstart,dend,kksD,APs,mm,kks,ei=ei,)
     
     if save:
         nl = '\n'
         readme = f'{cc} DPS created at {datetime.today().isoformat()}{nl}'\
+                + f'- Exclude intermittent generation: {ei}'\
                 + f'- Start date: {dstart}{nl}'\
                 + f'- End date: {dend}{nl}'\
                 + f'- Time taken to build: {timer() - t0:1g}s{nl}'
@@ -653,10 +656,28 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,):
         with open(fn_,'wb') as file:
             pickle.dump({'drange':drange,'dpsF':dpsF,'dpsP':dpsP,
                         'dpsFx':dpsFx,'dpsPx':dpsPx,'readme':readme},file)
+        
+        with open(fn_.replace('.pkl','_ivdl.pkl'),'wb') as file:
+            pickle.dump({'drange':drange,
+                        'moF':moF,'moP':moP,
+                        'readme':readme},file)
     
     return drange,dpsF,dpsP,dpsFx,dpsPx
 
-def process_aps(APsK,dlo,dhi,mm,):
+def load_mouts(dstart,dend,cc,sd,):
+    """Load the individual generator outputs moF, moP.
+    
+    The data for this is saved in eomf.load_dps (with 'rerun' & 'save' on).
+    """
+    sd_ = os.path.join(sd,'output_cache','DPs',)
+    fn_ = os.path.join(sd_,f'{cc}_APs{d2s(dstart)}-{d2s(dend)}_ivdl.pkl')
+    with open(fn_,'rb') as file:
+        data = pickle.load(file)
+    
+    print(data['readme'])
+    return [data[k] for k in ['drange','moF','moP',]]
+
+def process_aps(APsK,dlo,dhi,mm,excl_intermittent=True,):
     """Use APs to find the forced and unforced outages.
     
     This is the core of the method for determining country-level outages.
@@ -685,6 +706,7 @@ def process_aps(APsK,dlo,dhi,mm,):
     dlo - the start time
     dhi - the end time
     mm - the dict of generator data
+    excl_intermittent - bool (to exclude intermittent in PSRTYPE_MAPPINGS_INTER)
     
     Outputs [I think these are not independent...?]
     ---
@@ -708,11 +730,16 @@ def process_aps(APsK,dlo,dhi,mm,):
     # First, pull out all of data into a list (if the docStatus + dates are ok)
     ap_out = []
     for m in mmRdr:
+        # Only use generators that are not wind/solar/hydro ror
+        if mm[m]['psrType'] in PSRTYPE_MAPPINGS_INTER.keys()\
+                    and excl_intermittent:
+            continue
+        
         for j,aps in enumerate(APsK[m]):
             if aps['docStatus']!='A09':
                 for k,dd in enumerate(aps['data']):
                     if (dhi>dd['start'] and dlo<dd['end']):
-                        if get_data(m,j,k)['val']>2*mm[m]['nomP']:
+                        if get_data(m,j,k)['val']>1.333*float(mm[m]['nomP']):
                             print(f'\nIgnoring {m} at {dlo} - output too high.')
                             continue
                         
@@ -722,6 +749,7 @@ def process_aps(APsK,dlo,dhi,mm,):
     mmsel = [a[0] for a in ap_out]
     unq_idxs = [i for i,m_ in enumerate(mmsel) if mmsel.count(m_)==1]
     mm_nunq = list(set([m_ for m_ in mmsel if mmsel.count(m_)!=1]))
+    mout = [mmsel[i] for i in unq_idxs] + mm_nunq
     
     # Build a dict of indexes for use with the non-unique generators
     mm_idx_dict = mtDict(mmsel)
@@ -774,16 +802,17 @@ def process_aps(APsK,dlo,dhi,mm,):
             vvals.append(mx)
             vvx.append(mx-mn)
     
-    return vvmult,vvals,nomps,vvx
+    return vvmult,vvals,nomps,vvx,mout
 
 
-def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
+def block_process_aps(dstart,dend,kksD,APs,mm,kks,ei=True,):
     """Block process the APs for a range of dates at half-hourly timesteps.
     
     Inputs
     ---
     dstart, dend - start/end dates to process
     kks, kksD, APs, mm - see help(eomf.load_aps)
+    ei - exclude_intermittent, help(eomf.process_aps)
     
     Returns
     ---
@@ -805,6 +834,8 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
     with Bar('Process APs', suffix='%(percent).1f%% - %(eta)ds',
                                                     max=len(dr_pair)) as bar:
         dpsF,dpsP,dpsFx,dpsPx = [np.zeros(len(drange)) for i in range(4)]
+        moF,moP = [mtDict(mm,) for i in range(2)]
+        
         for i,(dlo,dhi) in enumerate(dr_pair):
             # First check there is data for the period
             clk_i = np.abs((dlo-kksD)//timedelta(1))
@@ -817,17 +848,22 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
             
             # If there is, pull out the data for that date.
             isel_kk = np.argmin(clk_i)
-            for aps,dps,dpsX in zip([APsF,APsP],[dpsF,dpsP],[dpsFx,dpsPx]):
-                vvmult,vvals,nomps,vvx = \
-                            process_aps(aps[kks[isel_kk]],dlo,dhi,mm,)
+            for aps,dps,dpsX,mo in zip([APsF,APsP],[dpsF,dpsP],[dpsFx,dpsPx],
+                                                        [moF,moP,],):
+                vvmult,vvals,nomps,vvx,mout = \
+                            process_aps(aps[kks[isel_kk]],dlo,dhi,mm,ei,)
+                
+                # Update the dict of generator outages
+                dout = npa(vvmult)*(npa(nomps) - npa(vvals))
+                _ = [mo[m].append([i,d]) for m,d in zip(mout,dout)]
                 
                 # Calculate the output
-                dps[i] = npa(vvmult).dot(npa(nomps) - npa(vvals))
+                dps[i] = sum(dout)
                 dpsX[i] = sum(vvx) # vvmult = 1 for these times by construction
             
             bar.next()
     
-    return drange, dpsF, dpsP, dpsFx, dpsPx
+    return drange, dpsF, dpsP, dpsFx, dpsPx, moF, moP
 
 # Force the dict order
 genXmlData = odict({
