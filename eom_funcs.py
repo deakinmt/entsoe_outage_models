@@ -12,6 +12,9 @@ from importlib import reload
 from copy import deepcopy
 from scipy import sparse
 import quantecon as qe
+from dateutil.tz import gettz
+from pytz import country_timezones
+
 
 from eom_utils import repl_list, fn_root, data2csv, structDict, sctXt,\
         tDict2stamps, boxplotqntls, nanlt, nangt, plotEdf, cdf2qntls, rerr
@@ -463,12 +466,14 @@ def minmax_reconciliation(stts,ends,vals,nomps,dlo,dhi,):
 def load_aps(cc,sd,rerun=True,save=False,):
     """Load the availability periods list APs for country cc.
     
-    Is quite slow unfortunately.
-    
     Method:
     - Initialise a dict for storing the information (APs)
     - Read each entry of the zipped XML data
-    - Append each generator with an outage to the relevant date
+    - Append each generator with an outage at the relevant datetime kk
+    
+    Note that the keys for the dict kk are in UTC, where the dates that are
+    saved in the outage files are in local time; so, the datetime of the keys
+    do NOT match up with the datetimes of the saved zip files.
     
     Inputs
     ---
@@ -521,7 +526,8 @@ def load_aps(cc,sd,rerun=True,save=False,):
                 continue
             
             # This finds the dict key as the date
-            kk = fn.split('_')[-3]
+            kk_ = fn.split('_')[-3]
+            kk = get_utc_kk(kk_,cc,)
             
             # If not existing yet, add new one.
             if kk not in APs.keys():
@@ -762,6 +768,7 @@ def process_aps(APsK,dlo,dhi,mm,):
     
     return vvmult,vvals,nomps,vvx
 
+
 def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
     """Block process the APs for a range of dates at half-hourly timesteps.
     
@@ -794,8 +801,11 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,):
             # First check there is data for the period
             clk_i = np.abs((dlo-kksD)//timedelta(1))
             if sum(clk_i==0)<1:
-                print(f'No data for {dlo} (i = {i}). leaving as zero.\n')
-                continue
+                if sum((clk_i==1))==2:
+                    print(f'\nAmbiguous datetime {dlo} (i = {i}). Using earlier date.\n')
+                else:
+                    print(f'No data for {dlo} (i = {i}). leaving as zero.\n')
+                    continue
             
             # If there is, pull out the data for that date.
             isel_kk = np.argmin(clk_i)
@@ -1030,11 +1040,24 @@ cnvtr_flat = {k:'na' for k in cnvtr_elexon.keys() if k not in flat_out}
 for k in flat_out:
     cnvtr_flat[k] = None
 
-# date to string functions
+
+# date to string functions. NB: assumes ALL are in UTC.
 d2s = lambda d: d.isoformat()[:13].replace('-','').replace('T','')
 s2d = lambda s: datetime(*[int(v) for v in [s[:4],s[4:6],s[6:8],s[8:]]])
 m2s = lambda m: '-'.join([f'{ii:02d}' for ii in [m.year,m.month,m.day]])
 s2m = lambda s: datetime(*[int(v) for v in s.split('-')])
+
+def get_utc_kk(kk,cc):
+    """Convert a local datetime string to UTC for country cc."""
+    cc = cc if cc!='I0' else 'IE'
+    
+    # Based on s2d
+    dt_str = [int(v) for v in [kk[:4],kk[4:6],kk[6:8],kk[8:]]]
+    
+    # Update to UTC
+    tt_ = datetime(*dt_str,tzinfo=gettz(country_timezones[cc][0]) )
+    tt = datetime(*dt_str,) - tt_.utcoffset()
+    return d2s(tt)
 
 # ============
 
@@ -1297,7 +1320,7 @@ class bzOutageGenerator():
         """
         listEq = lambda ll: all([ll[0]==l for l in ll])
         
-        # First load the totals for each country
+        # First load the totals for each balancing zone
         dn = os.path.join(fn_root,'misc','inpr',)
         
         hs = []; rs = []
@@ -1317,6 +1340,22 @@ class bzOutageGenerator():
         self.nseInPrd.h = [int(h[:4]) for h in hs[0][1:]]
         self.nseInPrd.r = rs[0]
         
+        # Then, for countries which are split, also add the 'totals'
+        cc_update = set([cc[:2] for cc in self.nseInPrd.ccs 
+                                    if cc[:2] not in self.nseInPrd.ccs])
+        
+        list_add = lambda lxx: np.kron(
+                np.ones(len(lxx)),np.eye(len(lxx[0]))
+                                        ).dot(np.concatenate(lxx))
+        # lxx = [np.ones((3,3)) for i in range(3)]
+        # lxx = [(i**2)*np.random.random((5,3)) for i in range(3)]
+        # assert(np.all((lxx[0] + lxx[1] + lxx[2])==list_add(lxx)))
+        
+        for cc in cc_update:
+            self.nseInPrd[cc] = list_add([self.nseInPrd[cc_] 
+                            for cc_ in self.nseInPrd.ccs if cc in cc_])
+            self.nseInPrd['ccs'].append(cc)
+        
         # Then load the production and generation, based on fig_pngUnits
         # NB: we only use the Dec 2020 data for now as it seems units are
         # not taken off.
@@ -1330,20 +1369,23 @@ class bzOutageGenerator():
                        })
         self.nsePng.head = list(pngHeads.keys())
         
-        # self.nsePng.ccs = os.listdir(os.path.join(sd,'png')) # TO DO!
-        self.nsePng.ccs = ['GB','IE','I0','FR','BE','NL',]
-        
+        dpng = os.path.join(fn_root,'entsoeData','png',)
+        self.nsePng.ccs = get_path_dirs(dpng,'names',)
         for cc in self.nsePng.ccs:
             self.nsePng[cc] = {}
-            head,data = csvIn(os.path.join(fn_root,'entsoeData','png',
-                                            cc,f'png_{cc}_2020-12-01.csv'))
+            fns = [fn for fn in get_path_files(os.path.join(dpng,cc))
+                                            if '2020-12-01.csv' in fn]
+            heads, data = mtList(2)
+            update_hd = lambda dd: [heads.append(dd[0]),data.extend(dd[1])]
+            _ = [update_hd(csvIn(fn)) for fn in fns]
+            assert(all([heads[0]==h for h in heads]))
+            
             for kk,pmap in PSRTYPE_MAPPINGS.items():
-                d_pmap = [d for d in data if (d[head.index('psrType')]==kk)]
-                self.nsePng[cc][pmap] = [[vf(r[head.index(k)]) 
+                d_pmap = [d for d in data if (d[heads[0].index('psrType')]==kk)]
+                self.nsePng[cc][pmap] = [[vf(r[heads[0].index(k)]) 
                                for k,vf in pngHeads.items()] for r in d_pmap]
             
-        self.fleets.ccs = ['GB','IE','FR','BE','NL',]
-        for cc in self.fleets.ccs:
+        for cc in self.nsePng.ccs:
             self.fleets[cc] = self.getGenFleets(cc)
     
     @staticmethod
@@ -1357,6 +1399,7 @@ class bzOutageGenerator():
         """Get the generator fleets using the LILO method for system cc."""
         
         # Get the nseInPrd table andlist of generators
+        cc = 'IE' if cc=='I0' else cc # use same data for Irish codes
         cc_tbl = self.nseInPrd[cc]
         rr = self.nseInPrd.r[:-1] # ignore Total Grand Capacity
         gens = self.nsePng[cc]

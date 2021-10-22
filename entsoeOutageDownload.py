@@ -10,12 +10,12 @@ from download_config import dstart, dend, dstart_xtra, dend_xtra, dT
 
 codes = getCodes('CH') # change this to change how much data is downloaded
 codes = getCodes(['GB', 'IE', 'BE', 'NL', 'I0', 'FR','DK-1', 'DK-2', 
-                    'NO-1', 'NO-2', 'NO-3', 'NO-4', 'NO-5', 'DE', 'ES',])
+                'NO-1', 'NO-2', 'NO-3', 'NO-4', 'NO-5', 'DE', 'ES','DE18',])
 
 sdOut_ = os.path.join(sd,'outage_data')
 
 i0 = 0 # tweak if bailed previously due to, e.g., failed connection
-dset = np.arange(dstart_xtra,dend_xtra,dT,dtype=object)
+dset = np.arange(dstart_xtra,dend_xtra+dT,dT,dtype=object)
 
 # Useful text strings
 txt0 = "No matching data found for Data item Planned Unavailability of Generation Units [15.1.A], Changes in Actual Availability of Generation Units [15.1.B]"

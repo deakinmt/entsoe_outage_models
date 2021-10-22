@@ -7,13 +7,14 @@ based on NW European countries.
 TO DO
 ---
 [x] how to most suitably load in the require production data
+[ ] add an option if the installed_prod has not been saved
 [x] check we have all countries 
 [x] check if vvmult should be used
 [x] checksums on all country outputs
 [ ] checksums on intermediate outputs (e.g., vvmult)
 [ ] exploring the errors in GB data
 [ ] exploring the negative values in the IE data
-[ ] exploring discontinuity in DE, NL data
+[x] exploring discontinuity in DE, NL data
 [ ] saving the individual generator outages sparse matrix
 [x] saving the output data for re-use
 [x] exploring the min-max errors
@@ -21,12 +22,18 @@ TO DO
 ===
 
 
-Notes: not clear at the moment if the data can be clearly reused:
+Notes
+---
+
+not clear at the moment if the data can be clearly reused:
 https://transparency.entsoe.eu/content/static_content/download?path=/Static%20content/terms%20and%20conditions/191025_List_of_Data_available_for_reuse_v2_cln.pdf
 
 In general, the scripts use options to select what to run - e.g.,
 entsoeOutageDownload.py line  17-24 can be changed from 0 to 1
 to enable those options.
+
+I0 refers to __, whilst IE refers to the 'old' irish datacode,
+whilst IE refers to the full SEM.
 
 
 Scripts / options
