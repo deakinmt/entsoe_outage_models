@@ -12,8 +12,9 @@ TO DO
 [x] check if vvmult should be used
 [x] checksums on all country outputs
 [ ] checksums on intermediate outputs (e.g., vvmult)
-[ ] exploring the errors in GB data
-[ ] exploring the negative values in the IE data
+[ ] exploring the flat period GB Xmas 2017
+[x] exploring the errors in GB data
+[x] exploring the negative values in the IE data
 [x] exploring discontinuity in DE, NL data
 [ ] saving the individual generator outages sparse matrix
 [x] saving the output data for re-use
@@ -61,7 +62,8 @@ It is suggested that the data is approached in the following way:
   step. First, log into the online platform. Then, go to the "Installed
   Capacity per production Type" page; select years 2015-2021 for each
   of [BE, DE-AT-LU, DE-LU, DK-1, DK-2, FR, GB, IE, NL, NO-1, NO-2, NO-3
-  NO-4, NO-5], select export as csv. This should save the files as, e.g.,
+  NO-4, NO-5], select export as csv. These should be downloaded and 
+  saved with the balancing zone code prepended the file, e.g.,
   "BE_Installed Capacity per Production Type_201501010000-202201010000";
   These should then be saved in the directory .\entsoe_outage_data\misc\inpr\.
 

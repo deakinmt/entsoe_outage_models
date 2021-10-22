@@ -698,27 +698,35 @@ def process_aps(APsK,dlo,dhi,mm,):
     """
     # dhi = dlo+timedelta(0,1800) if dhi is None else dhi
     mmRdr = list(APsK.keys())
-
-    # First, pull out all of data into a list (if the docStatus + dates are ok)
-    ap_out = []
-    for i,m in enumerate(mmRdr):
-        for j,aps in enumerate(APsK[m]):
-            if aps['docStatus']!='A09':
-                for k,dd in enumerate(aps['data']):
-                    if (dhi>dd['start'] and dlo<dd['end']):
-                        ap_out.append([m,j,k,])
     
-    # m,j,k: mRID, aps item no., report data idx
+    # Util funcs - m,j,k: mRID, aps item no., report data idx
     aps_mj = lambda m,j:     APsK[m][j]
     get_data = lambda m,j,k: APsK[m][j]['data'][k]
     get_vm0 = lambda m,j,k: min((get_data(m,j,k)['end'] - dlo)/(dhi - dlo),1)
     nom2float = lambda nomP: np.nan if nomP is None else float(nomP)
+
+    # First, pull out all of data into a list (if the docStatus + dates are ok)
+    ap_out = []
+    for m in mmRdr:
+        for j,aps in enumerate(APsK[m]):
+            if aps['docStatus']!='A09':
+                for k,dd in enumerate(aps['data']):
+                    if (dhi>dd['start'] and dlo<dd['end']):
+                        if get_data(m,j,k)['val']>2*mm[m]['nomP']:
+                            print(f'\nIgnoring {m} at {dlo} - output too high.')
+                            continue
+                        
+                        ap_out.append([m,j,k,])
     
-    # Find unique vales and then duplicates
+    # Find simple (unique) values records, and then duplicates
     mmsel = [a[0] for a in ap_out]
     unq_idxs = [i for i,m_ in enumerate(mmsel) if mmsel.count(m_)==1]
     mm_nunq = list(set([m_ for m_ in mmsel if mmsel.count(m_)!=1]))
-
+    
+    # Build a dict of indexes for use with the non-unique generators
+    mm_idx_dict = mtDict(mmsel)
+    _ = [mm_idx_dict[a_[0]].append(i) for i,a_ in enumerate(ap_out)]
+    
     # Get the time multiplier, nom power, and AP value
     vvmult = [get_vm0(*ap_out[i]) for i in unq_idxs]
     vvals = [get_data(*ap_out[i])['val'] for i in unq_idxs]
@@ -728,7 +736,7 @@ def process_aps(APsK,dlo,dhi,mm,):
     # Deal with any duplicates
     for nunq in mm_nunq:
         # First, pull out the indexes in ap_out and nominal power
-        idxs = [i for i,a_ in enumerate(ap_out) if a_[0]==nunq]
+        idxs = mm_idx_dict[nunq]
         nomps.append(nom2float(mm[mmsel[idxs[0]]]['nomP']))
         
         # Then, create lists of the data used to create the value:
@@ -1384,7 +1392,7 @@ class bzOutageGenerator():
                 d_pmap = [d for d in data if (d[heads[0].index('psrType')]==kk)]
                 self.nsePng[cc][pmap] = [[vf(r[heads[0].index(k)]) 
                                for k,vf in pngHeads.items()] for r in d_pmap]
-            
+        
         for cc in self.nsePng.ccs:
             self.fleets[cc] = self.getGenFleets(cc)
     
