@@ -7,13 +7,11 @@ based on NW European countries.
 TO DO
 ---
 [x] how to most suitably load in the require production data
-[ ] add an option if the installed_prod has not been saved
 [x] check we have all countries 
 [x] check if vvmult should be used
 [x] checksums on all country outputs
-[ ] checksums on intermediate outputs (e.g., vvmult)
 [x] exploring individual generator output errors (e.g., FR moF/moP ii=5)
-[ ] exploring the flat period GB Xmas 2017
+[x] exploring the flat period GB Xmas 2017
 [x] exploring the errors in GB data
 [x] exploring the negative values in the IE data
 [x] exploring discontinuity in DE, NL data
@@ -21,6 +19,7 @@ TO DO
 [x] saving the output data for re-use
 [x] exploring the min-max errors
 [x] looking at outages of only conventional plant, not renewables
+[ ] Miscellaneous individual checks (further plt_approach_xmpls)
 ===
 
 
@@ -40,6 +39,7 @@ whilst IE refers to the full SEM.
 Limitations:
 - By default, 'outages' which result in the output being 1.33
   times greater than the generator nominal power are neglected.
+- By default, we ignore outages on wind/solar/hydro run of river.
 - 
 
 

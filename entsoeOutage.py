@@ -43,38 +43,17 @@ sf = 0
 # Script options
 rerun = 0
 cc = 'GB' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'ES', 'DK', 'DE',
-cc = 'FR' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'ES', 'DK', 'DE',
 av_model = 'ecr'
 
-# # Load the data and get the clock & keys
-# APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
-# # self = eomf.bzOutageGenerator(av_model=av_model,)
+# Load the data and get the clock & keys
+APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
+drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
+                                    ds,de,cc,sd,rerun=0,save=0,)
+drange, moF, moP = eomf.load_mouts(ds,de,cc,sd,)
 
-# ds = datetime(2017,8,28,)
-# de = datetime(2017,9,2,)
-# drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
-#                                     ds,de,cc,sd,rerun=1,save=1,)
-# # # drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
-# #                                     # ds,de,cc,sd,rerun=0,save=0,)
-# drange, moF, moP = eomf.load_mouts(ds,de,cc,sd,)
-# # # plt.plot_date(drange,dpsF+dpsP,)
-# # # tlps()
-
-# cc_ = 'FR'
-# APs, mm, kks, kksD = eomf.load_aps(cc_,sd,rerun=rerun,save=True)
-# ds = datetime(2017,8,28,)
-# de = datetime(2017,9,2,)
-# _ = eomf.load_dps(ds,de,cc_,sd,rerun=1,save=1,)
-# drange, moF, moP = eomf.load_mouts(ds,de,cc,sd,)
-
-# # Choosing a key
-# mof = {k:v for k,v in moF.items() if len(v)>0}
-# ii = 3
-# k = gdk(mof,ii)
-
-
-
-
+# Note: using the outage generator requires data to be downloaded
+# as described in the readme.
+self = eomf.bzOutageGenerator(av_model=av_model,)
 
                                     
 if pltOutageChanges:
@@ -422,3 +401,9 @@ if plt_approach_xmpl_vvmults or plt_approach_xmpl_contiguous:
 
     # plt_approach_xmpl_contiguous Entsoe:
     # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=26.08.2017+00:00|UTC|DAY&dateTime.endDateTime=01.09.2017+00:00|UTC|DAY&area.values=CTY|10YFR-RTE------C!CTA|10YFR-RTE------C&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=CORDEMAIS+5&masterDataFilterCode=&dv-datatable_length=10
+    
+    
+    
+    # Interesting note: there DOES seem to be no changes in GB planned outages 
+    # between 22nd and 26th Dec2017.
+    # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=22.12.2017+00:00|UTC|DAY&dateTime.endDateTime=26.12.2017+00:00|UTC|DAY&CTY|10Y1001A1001A92E|MULTI=CTY|10Y1001A1001A92E|MULTI&area.values=CTY|10Y1001A1001A92E!CTA|10Y1001A1001A016&area.values=CTY|10Y1001A1001A92E!CTA|10YGB----------A&assetType.values=PU&assetType.values=GU&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=&masterDataFilterCode=&dv-datatable_length=10
