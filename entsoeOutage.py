@@ -33,19 +33,50 @@ pltTsGenerator = 0
 pltTsCcWinters = 0
 pltOutageChanges = 0
 
+# Plotting examples of how the algorithm works
+plt_approach_xmpl_vvmults = 0
+plt_approach_xmpl_contiguous = 0
+
 # Save figure flag
 sf = 0
 
 # Script options
 rerun = 0
 cc = 'GB' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'ES', 'DK', 'DE',
+cc = 'FR' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'ES', 'DK', 'DE',
 av_model = 'ecr'
 
-# Load the data and get the clock & keys
-APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
-self = eomf.bzOutageGenerator(av_model=av_model,)
+# # Load the data and get the clock & keys
+# APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
+# # self = eomf.bzOutageGenerator(av_model=av_model,)
+
+# ds = datetime(2017,8,28,)
+# de = datetime(2017,9,2,)
+# drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
+#                                     ds,de,cc,sd,rerun=1,save=1,)
+# # # drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
+# #                                     # ds,de,cc,sd,rerun=0,save=0,)
+# drange, moF, moP = eomf.load_mouts(ds,de,cc,sd,)
+# # # plt.plot_date(drange,dpsF+dpsP,)
+# # # tlps()
+
+# cc_ = 'FR'
+# APs, mm, kks, kksD = eomf.load_aps(cc_,sd,rerun=rerun,save=True)
+# ds = datetime(2017,8,28,)
+# de = datetime(2017,9,2,)
+# _ = eomf.load_dps(ds,de,cc_,sd,rerun=1,save=1,)
+# drange, moF, moP = eomf.load_mouts(ds,de,cc,sd,)
+
+# # Choosing a key
+# mof = {k:v for k,v in moF.items() if len(v)>0}
+# ii = 3
+# k = gdk(mof,ii)
 
 
+
+
+
+                                    
 if pltOutageChanges:
     drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(ds,de,'GB',sd,rerun=False)
     for xx,nm in zip([dpsF,dpsF + dpsP],['Forced','Total',]):
@@ -351,3 +382,43 @@ if pltTsCcWinters:
             plt.close()
         else:
             tlps()
+
+if plt_approach_xmpl_vvmults or plt_approach_xmpl_contiguous:
+    cc_ = 'FR'
+    APs, mm, kks, kksD = eomf.load_aps(cc_,sd,rerun=rerun,save=True)
+    ds = datetime(2017,8,28,)
+    de = datetime(2017,9,2,)
+    _ = eomf.load_dps(ds,de,cc_,sd,rerun=1,save=1,)
+    drange, moF, moP = eomf.load_mouts(ds,de,cc,sd,)
+    
+    def mo2x(k):
+        xx = np.zeros((len(drange),2))
+        _ = [xx[:,0].__setitem__(v[0],v[1]) for v in moP[k]]
+        _ = [xx[:,1].__setitem__(v[0],v[1]) for v in moF[k]]
+        return xx
+    
+    
+    if plt_approach_xmpl_vvmults:
+        figname = 'plt_approach_xmpl_vvmults'
+        k = '17W100P100P00788'
+    elif plt_approach_xmpl_contiguous:
+        figname = 'plt_approach_xmpl_contiguous'
+        k = '17W100P100P0018Q'
+    
+    fig, ax = plt.subplots(figsize=(9,3.2))
+    plt.plot_date(drange,mo2x(k),'.-',)
+    plt.title(f"{cc_}, Generator: {mm[k]['psrName']} ({k})")
+    plt.xlabel('Datetime (UTC)',)
+    plt.ylabel('Capacity reduction, MW')
+    plt.xlim((ds,de))
+    if sf:
+        sff(figname)
+    
+    tlps()
+    
+    # plt_approach_xmpl_vvmults Entsoe:
+    # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=26.08.2017+00:00|UTC|DAY&dateTime.endDateTime=03.09.2017+00:00|UTC|DAY&CTY|10YFR-RTE------C|MULTI=CTY|10YFR-RTE------C|MULTI&area.values=CTY|10YFR-RTE------C!CTA|10YFR-RTE------C&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=&masterDataFilterCode=17W100P100P00788&dv-datatable_length=10
+    
+
+    # plt_approach_xmpl_contiguous Entsoe:
+    # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=26.08.2017+00:00|UTC|DAY&dateTime.endDateTime=01.09.2017+00:00|UTC|DAY&area.values=CTY|10YFR-RTE------C!CTA|10YFR-RTE------C&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=CORDEMAIS+5&masterDataFilterCode=&dv-datatable_length=10

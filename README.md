@@ -12,7 +12,7 @@ TO DO
 [x] check if vvmult should be used
 [x] checksums on all country outputs
 [ ] checksums on intermediate outputs (e.g., vvmult)
-[ ] exploring individual generator output errors (e.g., FR moF/moP ii=5)
+[x] exploring individual generator output errors (e.g., FR moF/moP ii=5)
 [ ] exploring the flat period GB Xmas 2017
 [x] exploring the errors in GB data
 [x] exploring the negative values in the IE data
@@ -36,6 +36,11 @@ to enable those options.
 
 I0 refers to __, whilst IE refers to the 'old' irish datacode,
 whilst IE refers to the full SEM.
+
+Limitations:
+- By default, 'outages' which result in the output being 1.33
+  times greater than the generator nominal power are neglected.
+- 
 
 
 Scripts / options

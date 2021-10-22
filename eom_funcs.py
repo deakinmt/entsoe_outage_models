@@ -402,12 +402,10 @@ def check_ssend_flg(stts,ends):
         return all([e<=s for s,e in zip(stts[1:],ends[:-1])])
 
 def contiguous_duplicates(stts,ends,vals,nomps,dlo,dhi,):
-    """Create a contiguous equivalent when there is a stepped curve.
+    """Create a contiguous equivalent outage when there is a stepped curve.
     
-    Approach:
-    - between dlo and dhi, mark all of the datetimes between stts and ends
-    - between stt and end, value at 'val', otherwise at 'nomps'
-    - If end[i]=stt[i+1], then the value of 'd' will simply be repeated.
+    Stts, ends must be such that we can just take the difference of these
+    and multiply by 'val' to get the output.
     
     Inputs
     ---
@@ -417,10 +415,7 @@ def contiguous_duplicates(stts,ends,vals,nomps,dlo,dhi,):
     
     Returns
     ---
-    dd - the datetimes
-    pp - the powers
-    vvl - the equivalent loading level, in units of vals/nomps
-    
+    vvl - the equivalent loading level, in units of vals/nomps (MW likely)
     """
     if not check_ssend_flg(stts,ends):
         print('A clash in the non-unique APs in contiguous duplicates!')
@@ -428,16 +423,10 @@ def contiguous_duplicates(stts,ends,vals,nomps,dlo,dhi,):
     
     dt = dhi - dlo
     
-    # Tidied up
-    pp = [nomps] + [p for v in vals for p in [v,nomps]] + [nomps]
+    ends_ = npa([min(e,dhi) for e in ends])
+    stts_ = npa([max(e,dlo) for e in stts])
     
-    # Build the datetimes the powers are at
-    stts_ = [dlo, max(dlo,stts[0]) ] + stts[1:] + [min(ends[-1],dhi)]
-    ends_ = [max(dlo,stts[0])] + ends[:-1] + [min(ends[-1],dhi), dhi]
-    dd = [d for i in range(len(stts)+1) for d in [(stts_[i],ends_[i]),
-                                                  (ends_[i],stts_[i+1])]]
-    
-    return dd, pp, (o2o(np.diff(dd))/dt).dot(pp)
+    return ((ends_-stts_)/dt).dot(vals)
 
 def minmax_reconciliation(stts,ends,vals,nomps,dlo,dhi,):
     """Find the maximum and minimum possible availabilities of generators.
@@ -724,7 +713,8 @@ def process_aps(APsK,dlo,dhi,mm,excl_intermittent=True,):
     # Util funcs - m,j,k: mRID, aps item no., report data idx
     aps_mj = lambda m,j:     APsK[m][j]
     get_data = lambda m,j,k: APsK[m][j]['data'][k]
-    get_vm0 = lambda m,j,k: min((get_data(m,j,k)['end'] - dlo)/(dhi - dlo),1)
+    get_vm0 = lambda m,j,k: ( min(get_data(m,j,k)['end'],dhi) -
+                            max(get_data(m,j,k)['start'],dlo))/(dhi - dlo)
     nom2float = lambda nomP: np.nan if nomP is None else float(nomP)
 
     # First, pull out all of data into a list (if the docStatus + dates are ok)
@@ -785,7 +775,7 @@ def process_aps(APsK,dlo,dhi,mm,excl_intermittent=True,):
             vvx.append(0)
         elif ssend_flg:
             # If the starts & ends are contiguous, no ambiguity:
-            vvl = contiguous_duplicates(stts,ends,vals,nomps[-1],dlo,dhi)[2]
+            vvl = contiguous_duplicates(stts,ends,vals,nomps[-1],dlo,dhi)
             vvmult.append(1)
             vvals.append(vvl)
             vvx.append(0)
