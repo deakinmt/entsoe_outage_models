@@ -4,7 +4,6 @@ Data downloaded from ENTSOe's transparency platform using the
 entsoe_outage_models repository, __LINK_HERE__ [1], supported by
 the Supergen Energy Networks Hub's CLEARHEADS Flex Fund project.
 
-
 M. Deakin, November 2021
 Contact: matthew.deakin@newcastle.ac.uk
 
@@ -13,17 +12,23 @@ Fields
 1. Time - datetime, UTC
 2. Planned outages, MW
 3. Forced outages, MW
-4. Planned outage 'uncertainty', MW
-5. Forced outage 'uncertainty', MW
+4. Total outages, MW
+5. Planned outage 'uncertainty', MW
+6. Forced outage 'uncertainty', MW
+7. Total outage 'uncertainty', MW
 
-Planned and forced outages (2/3) are defined as in [2], article 15. 
+Planned and forced outages (2/3) for an inividual plant are
+as defined as in [2], article 15; these fields are the sum of
+all generators with either planned or forced outage state.
+
+Total outages (4) is all outages irrespective of outage type.
 
 The country-wide values of each of these are determined by
 aggregating the outages across zones (e.g., for Norway,
 we use NO-1 - NO-5).
 
-The 'uncertainty' in 4/5 refers to the fact that some individual
-outage reports provide unclear information as to the state
+The 'uncertainty' in 5-7 refers to the fact that some individual
+outage reports provide ambiguous information as to the state
 of a generator at a given time. Rather than providing a set of
 rules to reconcile these, the maximum and minimum possible outage
 was determined for each zone; the average of these was taken for 

@@ -592,13 +592,13 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,ei=True,):
     The bulk of the work is done by "block_process_aps" which, in-turn, 
     calls "process_aps" for each of the hourly time periods.
     
-    This also saves moF, moP. These can then be loaded using load_mouts.
+    This also saves moX, moXx. Load these with using load_mouts.
     
     Returns
     ---
     drange - the clock
-    dpsF / dpsP - the forced / planned outages
-    dpsFx / dpsPx - the forced / planned outages max additional outages
+    dpsX - the forced / planned / total outages
+    dpsXx - the forced / planned / total outages max additional outages
     """
     sd_ = os.path.join(sd,'output_cache','DPs',)
     _ = os.mkdir(sd_) if not os.path.exists(sd_) else None
@@ -609,8 +609,7 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,ei=True,):
         with open(fn_,'rb') as file:
             data = pickle.load(file)
         print(data['readme'])
-        return [data[k] for k in ['drange','dpsF','dpsP','dpsFx','dpsPx']]
-    
+        return [data[k] for k in ['drange','dpsX','dpsXx',]]
     
     print(f'========== Processing {cc} APs...')
     APs, mm, kks, kksD = load_aps(cc,sd,rerun=False,save=False)
@@ -631,32 +630,40 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,ei=True,):
     
     # Run!
     t0 = timer()
-    drange,dpsF,dpsP,dpsFx,dpsPx,moF,moP \
+    drange,dpsX,dpsXx,moX,moXx \
                 = block_process_aps(dstart,dend,kksD,APs,mm,kks,ei=ei,)
     
     if save:
         nl = '\n'
         readme = f'{cc} DPS created at {datetime.today().isoformat()}{nl}'\
-                + f'- Exclude intermittent generation: {ei}'\
+                + f'- Exclude intermittent generation: {ei}{nl}'\
                 + f'- Start date: {dstart}{nl}'\
                 + f'- End date: {dend}{nl}'\
                 + f'- Time taken to build: {timer() - t0:1g}s{nl}'
         
         with open(fn_,'wb') as file:
-            pickle.dump({'drange':drange,'dpsF':dpsF,'dpsP':dpsP,
-                        'dpsFx':dpsFx,'dpsPx':dpsPx,'readme':readme},file)
+            pickle.dump({'drange':drange,'dpsX':dpsX,'dpsXx':dpsXx,
+                                                'readme':readme},file)
         
         with open(fn_.replace('.pkl','_ivdl.pkl'),'wb') as file:
-            pickle.dump({'drange':drange,
-                        'moF':moF,'moP':moP,
-                        'readme':readme},file)
+            pickle.dump({'drange':drange,'moX':moX,'moXx':moXx,
+                                                'readme':readme},file)
     
-    return drange,dpsF,dpsP,dpsFx,dpsPx
+    return drange, dpsX, dpsXx
 
 def load_mouts(dstart,dend,cc,sd,):
     """Load the individual generator outputs moF, moP.
     
     The data for this is saved in eomf.load_dps (with 'rerun' & 'save' on).
+    
+    NB: the order returned is Planned THEN Forced.
+    
+    Returns
+    ---
+    drange - the datetimes in moF, moP
+    moX - the planned/forced/total outages
+    moXx - the planned/forced/total possible additional outages
+    mo2x - util func for converting moX, moXx to time series
     """
     sd_ = os.path.join(sd,'output_cache','DPs',)
     fn_ = os.path.join(sd_,f'{cc}_APs{d2s(dstart)}-{d2s(dend)}_ivdl.pkl')
@@ -664,7 +671,23 @@ def load_mouts(dstart,dend,cc,sd,):
         data = pickle.load(file)
     
     print(data['readme'])
-    return [data[k] for k in ['drange','moF','moP',]]
+    dout = [data[k] for k in ['drange','moX','moXx',]]
+    
+    def mo2x(k):
+        """Convert the sparse moP, moF representation to a full time series.
+        
+        Defined in the eomf.load_mouts function to use the correct dict/drange.
+        
+        Input: mmrid - generator key for moF/moP.
+        Returns: xx - (nt,2)-sized np array, with ith row as [moF,moP,moFx,moPx]
+        """
+        xx = np.zeros((len(dout[0]),6))
+        xvals = [dout[ii][j] for ii in [1,2] for j in ['p','f','t',]]
+        _ = [[xx[:,ii].__setitem__(v[0],v[1]) for v in mo[k]]
+                                            for ii,mo in enumerate(xvals)]
+        return xx
+    
+    return dout + [mo2x]
 
 def process_aps(APsK,dlo,dhi,mm,excl_intermittent=True,):
     """Use APs to find the forced and unforced outages.
@@ -684,8 +707,11 @@ def process_aps(APsK,dlo,dhi,mm,excl_intermittent=True,):
             get_vm0) - e.g., if the outage is at 0% for 15 mins of an hour, but
             is otherwise available, then this is counted as 75%.
     -> Generators which do not have just one outage are then processed:
-        -> For these we calculate the minimum and maximum possible outages that
-            could have occured, which goes into vvx.
+        -> Where the time periods do not overlap, the outage is simply a 
+            weighted average, with no ambiguity.
+        -> For those outages which are ambiguous, the maximum and minimum 
+            possible outages are calculated; the minimum outage is saved with 
+            the maximum additional outage going into vvx.
     
     Inputs
     ---
@@ -779,12 +805,6 @@ def process_aps(APsK,dlo,dhi,mm,excl_intermittent=True,):
             vvmult.append(1)
             vvals.append(vvl)
             vvx.append(0)
-        elif len(set(mults))==1:
-            # Then, if the mults are all identical, choose most recent val
-            idx = cds.index(max(cds))
-            vvmult.append(get_vm0(*ap_out[idxs[idx]]))
-            vvals.append(get_data(*ap_out[idxs[idx]])['val'])
-            vvx.append(0)
         else:
             # Finally, if still no good, then find max / min outage rates
             mx, mn = minmax_reconciliation(stts,ends,vals,nomps[-1],dlo,dhi)
@@ -807,9 +827,10 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,ei=True,):
     Returns
     ---
     - drange - datetimes
-    - dpsF - forced outages time series
-    - dpsP - planned outages time series
-    - dpsFx, dpsPx - as above, but the max diff. due to ambiguous outage data
+    - dpsX - the p/f/t aggregated outages
+    - dpsXx - the p/f/t additional potential outages
+    - moX - the p/f/t individual generator outages
+    - moXx - the p/f/t additional potential individual generator outage
     """
     # Build the clocks
     drange = np.arange(dstart,dend,timedelta(0,3600),dtype=object)
@@ -820,11 +841,13 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,ei=True,):
                         for k,d in dd.items()} for kk,dd in APs.items()}
     APsF = {kk:{k:[v for v in d if v['businessType']=='A54'] 
                         for k,d in dd.items()} for kk,dd in APs.items()}
+    APsX = {'p':APsP,'f':APsF,'t':APs}
+    pft = ['p','f','t',]
     
     with Bar('Process APs', suffix='%(percent).1f%% - %(eta)ds',
                                                     max=len(dr_pair)) as bar:
-        dpsF,dpsP,dpsFx,dpsPx = [np.zeros(len(drange)) for i in range(4)]
-        moF,moP = [mtDict(mm,) for i in range(2)]
+        dpsX,dpsXx = [{k:np.zeros(len(drange)) for k in pft} for i in range(2)]
+        moX, moXx = [{k:mtDict(mm,) for k in pft} for i in range(2)]
         
         for i,(dlo,dhi) in enumerate(dr_pair):
             # First check there is data for the period
@@ -838,22 +861,23 @@ def block_process_aps(dstart,dend,kksD,APs,mm,kks,ei=True,):
             
             # If there is, pull out the data for that date.
             isel_kk = np.argmin(clk_i)
-            for aps,dps,dpsX,mo in zip([APsF,APsP],[dpsF,dpsP],[dpsFx,dpsPx],
-                                                        [moF,moP,],):
+            for fpt in pft:
                 vvmult,vvals,nomps,vvx,mout = \
-                            process_aps(aps[kks[isel_kk]],dlo,dhi,mm,ei,)
+                        process_aps(APsX[fpt][kks[isel_kk]],dlo,dhi,mm,ei,)
                 
                 # Update the dict of generator outages
                 dout = npa(vvmult)*(npa(nomps) - npa(vvals))
-                _ = [mo[m].append([i,d]) for m,d in zip(mout,dout)]
+                _ = [moX[fpt][m].append([i,d]) for m,d in zip(mout,dout)]
+                _ = [moXx[fpt][m].append([i,vx]) for m,vx in zip(mout,vvx)
+                                                                  if vx!=0]
                 
                 # Calculate the output
-                dps[i] = sum(dout)
-                dpsX[i] = sum(vvx) # vvmult = 1 for these times by construction
+                dpsX[fpt][i] = sum(dout)
+                dpsXx[fpt][i] = sum(vvx) # vvmult=1 for times by construction
             
             bar.next()
     
-    return drange, dpsF, dpsP, dpsFx, dpsPx, moF, moP
+    return drange, dpsX, dpsXx, moX, moXx
 
 # Force the dict order
 genXmlData = odict({
@@ -1381,6 +1405,7 @@ class bzOutageGenerator():
         list_add = lambda lxx: np.kron(
                 np.ones(len(lxx)),np.eye(len(lxx[0]))
                                         ).dot(np.concatenate(lxx))
+        # # For convenience - testing list_add code, if wanted
         # lxx = [np.ones((3,3)) for i in range(3)]
         # lxx = [(i**2)*np.random.random((5,3)) for i in range(3)]
         # assert(np.all((lxx[0] + lxx[1] + lxx[2])==list_add(lxx)))

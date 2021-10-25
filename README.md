@@ -19,7 +19,8 @@ TO DO
 [x] saving the output data for re-use
 [x] exploring the min-max errors
 [x] looking at outages of only conventional plant, not renewables
-[ ] Miscellaneous individual checks (further plt_approach_xmpls)
+[x] Miscellaneous individual checks (further plt_approach_xmpls)
+[x] Use 't' rather than 'f','p' in the outage script
 ===
 
 
@@ -36,11 +37,20 @@ to enable those options.
 I0 refers to __, whilst IE refers to the 'old' irish datacode,
 whilst IE refers to the full SEM.
 
-Limitations:
-- By default, 'outages' which result in the output being 1.33
+Limitations
+---
+L1. By default, 'outages' which result in the output being 1.33
   times greater than the generator nominal power are neglected.
-- By default, we ignore outages on wind/solar/hydro run of river.
-- 
+L2. Even with L1, sometimes 'negative' outages occur (e.g., for
+  DK in early 2020, I0 in early 2019).
+L3. By default, we ignore outages on wind/solar/hydro run of river.
+L4. The reasons/convention for individual countries and what is
+  classed as a 'Forced' versus 'Planned' outage has not been
+  considered.
+L5. Forced and planned outages are considered seperately; possible
+  clashes between these are not considered (e.g., both forced and
+  planned outages occuring at the same time).
+  
 
 
 Scripts / options

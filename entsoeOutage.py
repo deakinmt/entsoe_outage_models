@@ -36,6 +36,12 @@ pltOutageChanges = 0
 # Plotting examples of how the algorithm works
 plt_approach_xmpl_vvmults = 0
 plt_approach_xmpl_contiguous = 0
+plt_xmpl_1 = 0
+plt_xmpl_2 = 0
+plt_xmpl_3 = 0
+plt_xmpl_4 = 0
+plt_xmpl_5 = 0
+plt_xmpl_n = 0
 
 # Save figure flag
 sf = 0
@@ -47,18 +53,17 @@ av_model = 'ecr'
 
 # Load the data and get the clock & keys
 APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
-drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
-                                    ds,de,cc,sd,rerun=0,save=0,)
-drange, moF, moP = eomf.load_mouts(ds,de,cc,sd,)
+drange,dpsX,dpsXx = eomf.load_dps(ds,de,cc,sd,rerun=0,save=0,)
+drange, moX, moXx, mo2x = eomf.load_mouts(ds,de,cc,sd,)
+psrn2id = {mm[k]['psrName']:k for k in mm.keys()}
 
 # Note: using the outage generator requires data to be downloaded
 # as described in the readme.
 self = eomf.bzOutageGenerator(av_model=av_model,)
 
-                                    
 if pltOutageChanges:
-    drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(ds,de,'GB',sd,rerun=False)
-    for xx,nm in zip([dpsF,dpsF + dpsP],['Forced','Total',]):
+    drange,dpsX,dpsXx = eomf.load_dps(ds,de,'GB',sd,rerun=False)
+    for xx,nm in zip([dpsX['f'],dpsX['t']],['Forced','Total',]):
         dpss = [self.getWinters(sctXt(t=drange,x=xx),yrStt=yr,nYr=1,) 
                                                     for yr in range(2016,2021)]
         
@@ -87,15 +92,13 @@ if process_APs:
 
 if process_DPs:
     for cc in ccs:
-        drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
-                                    ds,de,cc,sd,rerun=True,save=True)
+        drange,dpsX,dpsXx = eomf.load_dps(ds,de,cc,sd,rerun=True,save=True)
 
 save_readme = """Outage data for NW European countries, Oct 2016-Mar 2021.
 
 Data downloaded from ENTSOe's transparency platform using the 
 entsoe_outage_models repository, __LINK_HERE__ [1], supported by
 the Supergen Energy Networks Hub's CLEARHEADS Flex Fund project.
-
 
 M. Deakin, November 2021
 Contact: matthew.deakin@newcastle.ac.uk
@@ -105,17 +108,23 @@ Fields
 1. Time - datetime, UTC
 2. Planned outages, MW
 3. Forced outages, MW
-4. Planned outage 'uncertainty', MW
-5. Forced outage 'uncertainty', MW
+4. Total outages, MW
+5. Planned outage 'uncertainty', MW
+6. Forced outage 'uncertainty', MW
+7. Total outage 'uncertainty', MW
 
-Planned and forced outages (2/3) are defined as in [2], article 15. 
+Planned and forced outages (2/3) for an inividual plant are
+as defined as in [2], article 15; these fields are the sum of
+all generators with either planned or forced outage state.
+
+Total outages (4) is all outages irrespective of outage type.
 
 The country-wide values of each of these are determined by
 aggregating the outages across zones (e.g., for Norway,
 we use NO-1 - NO-5).
 
-The 'uncertainty' in 4/5 refers to the fact that some individual
-outage reports provide unclear information as to the state
+The 'uncertainty' in 5-7 refers to the fact that some individual
+outage reports provide ambiguous information as to the state
 of a generator at a given time. Rather than providing a set of
 rules to reconcile these, the maximum and minimum possible outage
 was determined for each zone; the average of these was taken for 
@@ -145,38 +154,41 @@ if save_outputs:
         file.write(save_readme)
     
     for cc in ccs:
-        drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(
-                                    ds,de,cc,sd,rerun=False,save=False)
+        drange,dpsX,dpsXx = eomf.load_dps(ds,de,cc,sd,rerun=False,save=False)
         fn = os.path.join(dn_out,f'outages_{cc}',)
         
         data = np.concatenate([
-            [dpsF+(dpsFx*0.5),],
-            [dpsP+(dpsPx*0.5),],
-            [dpsFx*0.5,],
-            [dpsPx*0.5,],
+            [dpsX['p']+(dpsXx['p']*0.5),],
+            [dpsX['f']+(dpsXx['f']*0.5),],
+            [dpsX['t']+(dpsXx['t']*0.5),],
+            [dpsXx['p']*0.5,],
+            [dpsXx['f']*0.5,],
+            [dpsXx['t']*0.5,],
         ]).T
         dataHead = [
-            'forced_outages_mw',
             'planned_outages_mw',
-            'forced_outages_uncertainty_mw',
+            'forced_outages_mw',
+            'total_outages_mw',
             'planned_outages_uncertainty_mw',
+            'forced_outages_uncertainty_mw',
+            'total_outages_uncertainty_mw',
         ]
         saveDataFunc(fn,mode='csv',data=data,dataHead=dataHead,tStamps=drange,)
 
-
 if fig_entsoePs or fig_entsoePs_minmax or fig_entsoePs_ratio:
     for cc in ccs:
-        drange,dpsF,dpsP,dpsFx,dpsPx = eomf.load_dps(ds,de,cc,sd,rerun=False)
-        dps = dpsF + dpsP
-        dps_ = dpsF + dpsP + dpsFx + dpsPx
+        drange,dpsX,dpsXx = eomf.load_dps(ds,de,cc,sd,rerun=False)
+        dps = dpsX['t']
+        dps0 = dpsX['t'] + 0.5*dpsXx['t']
+        dps_ = dpsX['t'] + dpsXx['t']
         
         fig, ax = plt.subplots(figsize=(9,3.2))
         if fig_entsoePs or fig_entsoePs_minmax:
             ylms = (-500,max(dps)*1.15)
             if fig_entsoePs:
                 figname = f'fig_entsoePs_{cc}'
-                plt.plot_date(drange,dpsP,'-',label='Planned',lw=0.7,)
-                plt.plot_date(drange,dpsF,'-',label='Forced',lw=0.7,)
+                plt.plot_date(drange,dpsX['p'],'-',label='Planned',lw=0.7,)
+                plt.plot_date(drange,dpsX['f'],'-',label='Forced',lw=0.7,)
                 plt.plot_date(drange,dps,'k-',label='Total',lw=0.7,)
             elif fig_entsoePs_minmax:
                 figname = f'fig_entsoePs_minmax_{cc}'
@@ -188,9 +200,9 @@ if fig_entsoePs or fig_entsoePs_minmax or fig_entsoePs_ratio:
         elif fig_entsoePs_ratio:
             figname = f'fig_entsoePs_ratio_{cc}'
             ylms = (-1,42.0,)
-            plt.plot_date(drange,100*(dps_ - dps)/np.mean(dps),'k-',lw=0.7,)
+            plt.plot_date(drange,100*(dps_ - dps0)/np.mean(dps0),'k-',lw=0.7,)
             plt.title(
-                f'{cc}, RMS relative difference: {rerr(dps,dps_,p=0,):.2%}')
+                f'{cc}, RMS relative difference: {rerr(dps0,dps_,p=0,):.2%}')
             plt.ylabel("Relative difference: $\dfrac{ \mathrm{Max\,outage} - \mathrm{Min\,outage} }{ \mathrm{Mean\,outage} } $ , %")
         
         plt.xlabel('Datetime')
@@ -365,17 +377,11 @@ if pltTsCcWinters:
 if plt_approach_xmpl_vvmults or plt_approach_xmpl_contiguous:
     cc_ = 'FR'
     APs, mm, kks, kksD = eomf.load_aps(cc_,sd,rerun=rerun,save=True)
+    
     ds = datetime(2017,8,28,)
     de = datetime(2017,9,2,)
     _ = eomf.load_dps(ds,de,cc_,sd,rerun=1,save=1,)
-    drange, moF, moP = eomf.load_mouts(ds,de,cc,sd,)
-    
-    def mo2x(k):
-        xx = np.zeros((len(drange),2))
-        _ = [xx[:,0].__setitem__(v[0],v[1]) for v in moP[k]]
-        _ = [xx[:,1].__setitem__(v[0],v[1]) for v in moF[k]]
-        return xx
-    
+    drange, moX, moXx, mo2x = eomf.load_mouts(ds,de,cc_,sd,)
     
     if plt_approach_xmpl_vvmults:
         figname = 'plt_approach_xmpl_vvmults'
@@ -407,3 +413,86 @@ if plt_approach_xmpl_vvmults or plt_approach_xmpl_contiguous:
     # Interesting note: there DOES seem to be no changes in GB planned outages 
     # between 22nd and 26th Dec2017.
     # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=22.12.2017+00:00|UTC|DAY&dateTime.endDateTime=26.12.2017+00:00|UTC|DAY&CTY|10Y1001A1001A92E|MULTI=CTY|10Y1001A1001A92E|MULTI&area.values=CTY|10Y1001A1001A92E!CTA|10Y1001A1001A016&area.values=CTY|10Y1001A1001A92E!CTA|10YGB----------A&assetType.values=PU&assetType.values=GU&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=&masterDataFilterCode=&dv-datatable_length=10
+    
+
+
+if plt_xmpl_1 or plt_xmpl_2 or plt_xmpl_3 or plt_xmpl_4 \
+    or plt_xmpl_5 or plt_xmpl_n:
+    
+    cc_ = 'GB'
+    APs, mm, kks, kksD = eomf.load_aps(cc_,sd,rerun=rerun,save=True)
+    
+    if plt_xmpl_1:
+        xlm = (datetime(2017,2,5,),datetime(2017,2,24,),)
+        k = 'COTPS-2'
+        figname = 'plt_xmpl_1'
+
+    if plt_xmpl_2:
+        xlm = (datetime(2017,2,1,),datetime(2017,3,1,),)
+        k = 'HEYM28'
+        figname = 'plt_xmpl_2'
+
+    if plt_xmpl_3:
+        xlm = (datetime(2016,10,1,),datetime(2016,10,10,),)
+        k = 'FIDL-2'
+        figname = 'plt_xmpl_3'
+
+    if plt_xmpl_4:
+        xlm = (datetime(2019,1,8,),datetime(2019,3,28,),)
+        k = 'DRAXX-4'
+        figname = 'plt_xmpl_4'
+
+    if plt_xmpl_5:
+        xlm = (datetime(2021,1,25,),datetime(2021,1,31,),)
+        k = 'SCCL-2'
+        figname = 'plt_xmpl_5'
+
+    if plt_xmpl_n:
+        xlm = (datetime(2021,1,25,),datetime(2021,1,31,),)
+        k = _CHANGEME_
+        figname = _CHANGEME_
+    
+    # If needed, this version can re-run the analysis for a shorter period
+    ds,de = xlm
+    _ = eomf.load_dps(ds,de,cc_,sd,rerun=1,save=1,)
+    drange, moX, moXx, mo2x = eomf.load_mouts(ds,de,cc_,sd,)
+
+    fig, ax = plt.subplots(figsize=(9,3.2))
+    _ = [plt.plot_date(drange,mo2x(psrn2id[k])[:,ii],'o-',mfc='None',
+                                        ms=2*(1+ii),) for ii in range(3)]
+    _ = [plt.plot_date(drange,mo2x(psrn2id[k])[:,3+ii],'o-',mfc='None',
+                                        ms=2*(1+ii),) for ii in range(3)]
+    # plt.plot_date(drange,mo2x(psrn2id[k])[:,:3],'.-',mfc='None',)
+    # plt.plot_date(drange,mo2x(psrn2id[k])[:,3:],'.-',mfc='None',)
+    plt.title(f"{cc_}, Generator: {k} ({psrn2id[k]})")
+    plt.xlabel('Datetime (UTC)',)
+    plt.ylabel('Capacity reduction, MW')
+    plt.legend(['Plann','Frcd','Tot','FrcdX','PlanX','TotX',],
+                title='Outage Type',fontsize='small',loc=(1.02,0.25,),)
+    plt.xlim(xlm)
+    if sf:
+        sff(figname)
+
+    tlps()
+
+    # # # Note: using the outage generator requires data to be downloaded
+    # # # as described in the readme.
+    # # self = eomf.bzOutageGenerator(av_model=av_model,)
+
+    # COTPS-2 February 2017 (plt_xmpl_1)
+    # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=01.02.2017+00:00|UTC|DAY&dateTime.endDateTime=28.02.2017+00:00|UTC|DAY&CTY|10Y1001A1001A92E|MULTI=CTY|10Y1001A1001A92E|MULTI&area.values=CTY|10Y1001A1001A92E!CTA|10Y1001A1001A016&area.values=CTY|10Y1001A1001A92E!CTA|10YGB----------A&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=COTPS-2&masterDataFilterCode=&dv-datatable_length=10
+
+    # HEYM28 February 2017 (plt_xmpl_2)
+    # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=01.02.2017+00:00|UTC|DAY&dateTime.endDateTime=28.02.2017+00:00|UTC|DAY&area.values=CTY|10Y1001A1001A92E!CTA|10Y1001A1001A016&area.values=CTY|10Y1001A1001A92E!CTA|10YGB----------A&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=HEYM28&masterDataFilterCode=&dv-datatable_length=10
+
+    # FIDL-2 Oct 2016 (plt_xmpl_3)
+    # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=01.10.2016+00:00|UTC|DAY&dateTime.endDateTime=31.10.2016+00:00|UTC|DAY&CTY|10Y1001A1001A92E|MULTI=CTY|10Y1001A1001A92E|MULTI&area.values=CTY|10Y1001A1001A92E!CTA|10Y1001A1001A016&area.values=CTY|10Y1001A1001A92E!CTA|10YGB----------A&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=FIDL-2&masterDataFilterCode=&dv-datatable_length=10
+
+    # DRAXX-4 Spring 2019 (plt_xmpl_4)
+    # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=05.01.2019+00:00|UTC|DAY&dateTime.endDateTime=20.03.2019+00:00|UTC|DAY&CTY|10Y1001A1001A92E|MULTI=CTY|10Y1001A1001A92E|MULTI&area.values=CTY|10Y1001A1001A92E!CTA|10Y1001A1001A016&area.values=CTY|10Y1001A1001A92E!CTA|10YGB----------A&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=DRAXX-4&masterDataFilterCode=&dv-datatable_length=10
+
+    # SCCL-2 Jan 2021 (plt_xmpl_5)
+    # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=26.01.2021+00:00|UTC|DAY&dateTime.endDateTime=31.01.2021+00:00|UTC|DAY&CTY|10Y1001A1001A92E|MULTI=CTY|10Y1001A1001A92E|MULTI&area.values=CTY|10Y1001A1001A92E!CTA|10Y1001A1001A016&area.values=CTY|10Y1001A1001A92E!CTA|10YGB----------A&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=SCCL-2&masterDataFilterCode=&dv-datatable_length=10
+
+
+
