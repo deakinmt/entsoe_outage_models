@@ -181,7 +181,7 @@ def getCodes(cds=None):
         cds = ['NO-2','DK-1','NL','FR','BE','IE','GB','I0']
     elif cds=='CH':
         cds = ['NO-1','NO-2','NO-3','NO-4','NO-5',
-                    'DK-1','DK-2','NL','FR','BE','IE','GB','I0','DE','DE18',]
+                'DK-1','DK-2','NL','FR','BE','IE','GB','I0','DE','DE18','ES',]
     
     codes = {key:BIDDING_ZONES[key] for key in cds}
     return codes
@@ -303,61 +303,75 @@ def processXml(root,reqType):
     (so, for example, wNsF should choose one psr type).
     
     Use a name with *_BTA60 to choose a business type.
-    """
-    xmlns = (root.tag).split('}')[0]+'}'
-    timeSeries = root.findall(xmlns+'TimeSeries')
     
+    Inputs
+    ---
+    root - an ETnse XML root (NOT a simple root)
+    reqType - the required data type string
+    
+    Returns
+    ---
+    (tsOut, curve) - a clock (with uniform timesteps) and curve (with nans)
+    unit - the units
+    """
+    timeSeries = root.findall('TimeSeries')
+    
+    # First, return if no data (print to console if this happens)
+    if len(timeSeries)==0:
+        print('Empty time series, returning empty values.')
+        return (np.empty((0),dtype=np.datetime64),np.empty((0))), None
+    
+    # If looking at a specific business type, filter on those time series
     if len(reqType.split('_'))>1:
         reqT0,bt = reqType.split('_BT')
         timeSeries = [ts for ts in timeSeries \
-                            if ts.find(xmlns+'businessType').text==bt]
+                            if ts.find('businessType').text==bt]
     
-    crvs = []
-    tss = []
-    timeRes0 = timeSeries[0].find(xmlns+'Period').find(xmlns+'resolution')
-    if timeRes0.text[-1]=='M':
-        res = int(''.join(filter(str.isdigit,timeRes0.text)))
-        dtHr = timedelta(0,res*60) # assume this stays constant
-    elif timeRes0.text[-1]=='D':
-        res = int(''.join(filter(str.isdigit,timeRes0.text)))
-        dtHr = timedelta(1,) # assume this stays constant
+    # Util function to determine the time 
+    trt2dt = lambda trt: timedelta(1,) if trt[1]=='D' else \
+            timedelta(0,60*int(''.join(filter(str.isdigit,trt,))))
     
-    unit0 = timeSeries[0].find(xmlns+reqInfo[reqType]['unitHead']).text
-    
+    crvs, tss, units, timeRes = mtList(4)
     for ts in timeSeries:
-        prd = ts.find(xmlns+'Period')
-        # first check the time resolution +  is ok.
-        timeRes = prd.find(xmlns+'resolution')
-        if timeRes0.text!=timeRes.text:
-            print('Time before: {}, time after:{}'.format(
-                                            timeRes0.text,timeRes.text))
-            raise ValueError('The time res. changes! Code needs updating')
-        unit = ts.find(xmlns+reqInfo[reqType]['unitHead']).text
-        if unit0!=unit:
-            print('Unit before: {}, unit after:{}'.format(
-                                            unit0,unit))
-            raise ValueError('The time res. changes! Code needs updating')
+        prd = ts.find('Period')
         
+        # Pull out the fixed data for the whole period
+        units.append(ts.find(reqInfo[reqType]['unitHead']).text)
+        tr = trt2dt( prd.find('resolution').text )
+        ti_str = prd.find('timeInterval').find('start').text
         
-        tis = prd.find(xmlns+'timeInterval')
-        ti0 = tis.find(xmlns+'start').text
-        if ti0[-1]!='Z':
-            print('Warning! Datetime is NOT utc.')
-        dt0 = datetime.fromisoformat(ti0[:-1])
-        pts = prd.findall(xmlns+'Point')
-        for pt in prd.findall(xmlns+'Point'):
-            ii = int(pt.find(xmlns+'position').text) - 1
-            crvs.append(float(
-                          pt.find(xmlns+reqInfo[reqType]['dataName']).text))
-            tss.append(dt0+ii*dtHr)
+        # Check times are in UTC and get time
+        assert(ti_str[-1]=='Z')
+        ti = datetime.fromisoformat(ti_str[:-1])
+        
+        # Build the curves
+        for pt in prd.findall('Point'):
+            timeRes.append(tr)
+            ii = int(pt.find('position').text) - 1
+            crvs.append(float(pt.find(reqInfo[reqType]['dataName']).text))
+            tss.append(ti+ii*timeRes[-1])
     
-    nT = int((max(tss)-min(tss))/dtHr)
-    mT = min(tss)
-    tssStatic = np.array([mT+i*dtHr for i in range(nT+1)])
-    curveStatic = np.nan*np.zeros(len(tssStatic))
-    for i,t in enumerate(tss):
-        curveStatic[int((t - tssStatic[0])/dtHr)]=crvs[i]
-    return (tssStatic,curveStatic),unit0
+    # Check there is only one type of unit
+    assert(len(set(units))==1)
+    
+    # Check that we only have up to two time resolutions
+    assert(len(set(timeRes))<=2)
+    if len(set(timeRes))==2:
+        assert((max(timeRes)/min(timeRes)).is_integer)
+        print(f'Min/max resolutions: {min(timeRes)}, {max(timeRes)}')
+    
+    # Build a clock
+    dt = min(timeRes)
+    tsOut = np.arange(min(tss),max(tss)+timeRes[tss.index(max(tss))],dt,
+                                                            dtype=datetime)
+    
+    # Build the time series curve to match
+    curve = np.nan*np.zeros(len(tsOut))
+    for i,(t,tr,) in enumerate(zip(tss,timeRes)):
+        i0 = (t - tsOut[0])//dt
+        curve[slice(i0,i0+(tr//dt))]=crvs[i]
+    
+    return (tsOut,curve),set(units).pop()
 
 class ETnse(ET.Element,):
     """Overloaded version of Element Tree ET to avoid having to use xmlns.
@@ -1346,7 +1360,6 @@ class bzOutageGenerator():
                 dc[i,j] = np.nan if v in ['n/e','N/A'] else float(v)
         return dc
     
-        
     def set_avlbty(self,av_model=None,):
         """Set the availability model. See help(self.__init__) for options."""
         if av_model=='elexon':
@@ -1358,6 +1371,17 @@ class bzOutageGenerator():
         elif av_model=='flat':
             self.avlbty = avlbty_flat
             self.cnvtr = cnvtr_flat
+        
+        # Get the availability of conventional-only generators
+        not_conv = [ # Elexon   ECR
+            'Wind Onshore',     'wind_onshore',
+            'Wind Offshore',    'wind_offshore',
+            'Solar',            'solar',
+            'Hydro Run-of-river and poundage', # lumped all as normal hydro
+        ]   
+        self.avlbty_conv = deepcopy(self.avlbty)
+        _ = [self.avlbty_conv.__setitem__(k,0) for k in self.avlbty
+                                                        if k in not_conv]
     
     def set_trn_avl(self,):
         """Set the one-hour transition probability."""
