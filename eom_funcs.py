@@ -1187,7 +1187,7 @@ class bzOutageGenerator():
         If assign=False, unavl is a Bunch of unavailabilities for each cc.
         
         """
-        unavl = Bunch({'ccs':deepcopy(self.fleets.ccs)})
+        unavl = Bunch({'ccs':deepcopy(self.nsePng.ccs)})
         for cc in unavl.ccs:
             unavl[cc] = {
             'v':np.concatenate([v for v in self.fleets[cc][yr].values()]),
@@ -1416,6 +1416,11 @@ class bzOutageGenerator():
             self.nseInPrd[cc] = bzOutageGenerator.clean_inPrdData(data)
             self.nseInPrd['ccs'].append(cc)
         
+        # Norway only goes to 2020 for some reason - assume similar to 2020
+        for cc in [c for c in self.nseInPrd.ccs if 'NO-' in c]:
+            self.nseInPrd[cc].__setitem__((slice(None),slice(-1,None)),
+                                o2o(self.nseInPrd[cc][:,-3]))
+        
         if not (listEq(hs) and listEq(rs)):
             raise Exception('List row headings and column headings not equal!')
         
@@ -1426,13 +1431,8 @@ class bzOutageGenerator():
         cc_update = set([cc[:2] for cc in self.nseInPrd.ccs 
                                     if cc[:2] not in self.nseInPrd.ccs])
         
-        list_add = lambda lxx: np.kron(
-                np.ones(len(lxx)),np.eye(len(lxx[0]))
-                                        ).dot(np.concatenate(lxx))
-        # # For convenience - testing list_add code, if wanted
-        # lxx = [np.ones((3,3)) for i in range(3)]
-        # lxx = [(i**2)*np.random.random((5,3)) for i in range(3)]
-        # assert(np.all((lxx[0] + lxx[1] + lxx[2])==list_add(lxx)))
+        # sum list add concatante
+        list_add = lambda lxx: np.nansum(np.stack(lxx),axis=0)
         
         for cc in cc_update:
             self.nseInPrd[cc] = list_add([self.nseInPrd[cc_] 
