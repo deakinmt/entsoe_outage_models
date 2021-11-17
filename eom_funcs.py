@@ -1103,7 +1103,6 @@ cnvtr_elexon = {
         'Wind Onshore':'wind_onshore',
         }
 
-
 avlbty_flat = {'na':1.0}
 
 flat_out = ['Wind Offshore','Wind Onshore','Solar','Other renewable',
@@ -1172,12 +1171,14 @@ class bzOutageGenerator():
         self.set_trn_avl()
         self.getGeneratorPortfolios()
     
-    def build_unavl_model(self,nt=24*7*20*1,yr=2020,assign=True,seed=None,):
+    def build_unavl_model(self,nt=24*7*20*1,flt=None,yr=2020,
+                                                assign=True,seed=None,):
         """Build the unavailability matrices for all countries in self.fleets.
         
         Inputs
         ---
         nt - length of data to be generated, in hours (default 1 20 week winter)
+        flt - if None, use self.fleet
         yr - the fleet year to choose
         assign - if True (default) set to self.unavl
         seed - seed to pass to self.build_unavl_matrix
@@ -1187,12 +1188,15 @@ class bzOutageGenerator():
         If assign=False, unavl is a Bunch of unavailabilities for each cc.
         
         """
-        unavl = Bunch({'ccs':deepcopy(self.nsePng.ccs)})
+        flt = self.fleets if flt is None else flt
+        
+        unavl = Bunch({'ccs':deepcopy( list(flt.keys()) )})
         for cc in unavl.ccs:
+            fleet_yr = flt[cc] if yr is None else flt[cc][yr]
             unavl[cc] = {
-            'v':np.concatenate([v for v in self.fleets[cc][yr].values()]),
+            'v':np.concatenate([v for v in fleet_yr.values()]),
             'v_lt':np.concatenate([v*self.avlbty[self.cnvtr[k]]
-                                for k,v in self.fleets[cc][yr].items()]),
+                                for k,v in fleet_yr.items()]),
             }
             
             # Build the vector of generator sizes
@@ -1201,7 +1205,7 @@ class bzOutageGenerator():
             
             # AA = [] # <-- alternative method
             i0 = 0
-            for k,v in self.fleets[cc][yr].items():
+            for k,v in fleet_yr.items():
                 ng = len(v)
                 k_ = self.cnvtr[k]
                 k__ = self.cnvtr_ecr2elexon[k_]
@@ -1474,9 +1478,11 @@ class bzOutageGenerator():
     @staticmethod
     def pwr2fleet(ppwrs,val):
         """Convert list of powers ppwrs to a fleet of size val."""
-        isel = np.argmax(np.cumsum(ppwrs)>val)
-        gen_sub = val - sum(ppwrs[:isel])
-        return np.r_[ppwrs[:isel],gen_sub]
+        ppwrs_mul = int(np.ceil(val/sum(ppwrs)))
+        ppwrs_list = ppwrs*ppwrs_mul
+        isel = np.argmax(np.cumsum(ppwrs_list)>val)
+        gen_sub = val - sum(ppwrs_list[:isel])
+        return np.r_[ppwrs_list[:isel],gen_sub]
     
     def getGenFleets(self,cc,vbs=False,):
         """Get the generator fleets using the LILO method for system cc."""
