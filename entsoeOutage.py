@@ -11,6 +11,7 @@ from download_config import dstart, dend, dstart_xtra, dend_xtra, dT
 ds, de = dstart_xtra, dend_xtra
 from scipy import sparse
 from eom_utils import aMulBsp
+fig_sd = r"C:\Users\nmd155\OneDrive - Newcastle University\papers\pmaps2022\figures"
 
 # Select the countries to use
 ccs = ['GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'DK', 'ES', 'NO', 'DE',]
@@ -32,6 +33,8 @@ fig_hydro = 0
 pltTsGenerator = 0
 pltTsCcWinters = 0
 pltOutageChanges = 0
+pltOutageChanges_v2 = 0
+
 
 # Plotting examples of how the algorithm works
 plt_approach_xmpl_vvmults = 0
@@ -83,6 +86,39 @@ if pltOutageChanges:
                                                         fontsize='small',)
         if sf:
             sff(f'pltOutageChanges_{nm}')
+        
+        tlps()
+
+if pltOutageChanges_v2:
+    drange,dpsX,dpsXx = eomf.load_dps(ds,de,'GB',sd,rerun=False)
+    # Only do GB Forced for now.
+    for xx,nm in zip([dpsX['f'],dpsX['t']][:1],['Forced','Total',][:1]):
+        dpss = [self.getWinters(sctXt(t=drange,x=xx),yrStt=yr,nYr=1,) 
+                                                    for yr in range(2016,2021)]
+        
+        qntl = 1 - (1/24)
+        qntls_ = [1/24,(1/(24*7)),1/(24*30),1/(24*7*20)][::-1]
+        qntls = [[qq,1-qq] for qq in qntls_]
+        lbls = ['1 per day','1 per week','1 per month','1 per winter',][::-1]
+        hrs = np.arange(24)
+        qqs = [[[0,0]] for i in range (len(qntls))]
+        for hr in hrs[1:]:
+            dF = np.concatenate([dps.x[hr:] - dps.x[:-hr] for dps in dpss])/1e3
+            _ = [qq.append(np.nanquantile(dF,qntl)) 
+                                            for qq, qntl in zip(qqs,qntls)]
+        
+        for ii,(qq,lbl) in enumerate(zip(qqs,lbls)):
+            plt.fill_between(hrs,listT(qq)[0],listT(qq)[1],
+                            color=cm.Blues((ii+1)/(len(lbls))),label=lbl,)
+            _ = [plt.plot(hrs,listT(qq)[i],'k-',lw=0.25) for i in range(2)]
+        
+        set_day_label()
+        plt.xlim((0,23))
+        plt.xlabel('Hours since $\\tau$')
+        plt.ylabel('Change in Forced Outages (+ve \nas greater outage), GW',)
+        plt.legend(title='Frequency',fontsize='small',loc=(1.03,0.25),)
+        if sf:
+            sff(f'pltOutageChanges_v2_{nm}',sd=fig_sd,pdf=True,)
         
         tlps()
 
@@ -215,7 +251,7 @@ if fig_entsoePs or fig_entsoePs_minmax or fig_entsoePs_ratio:
         
         ylm = plt.ylim(ylms)
         if sf:
-            sff(figname,sd_mod='fig_entsoePs',)
+            sff(figname,sd_mod='fig_entsoePs',sd=fig_sd,pdf=True,)
             plt.close()
         else:
             tlps()
@@ -253,7 +289,7 @@ if fig_entsoeout:
     plt.ylabel('Resource mRID')
     plt.xticks(rotation=30)
     if sf:
-        sff(f'fig_entsoeout_{cc}_{kk}')
+        sff(f'fig_entsoeout_{cc}_{kk}',sd=fig_sd,pdf=True,)
 
     tlps()
 
@@ -421,36 +457,41 @@ if plt_xmpl_1 or plt_xmpl_2 or plt_xmpl_3 or plt_xmpl_4 \
     
     cc_ = 'GB'
     APs, mm, kks, kksD = eomf.load_aps(cc_,sd,rerun=rerun,save=True)
+    n_out = 3 # 3 for planned / forced / total; 2 for planned & forced.
+    minmax = False # also if not updated then plot both the min and max vals
     
     if plt_xmpl_1:
         xlm = (datetime(2017,2,5,),datetime(2017,2,24,),)
         k = 'COTPS-2'
         figname = 'plt_xmpl_1'
-
+    
     if plt_xmpl_2:
-        xlm = (datetime(2017,2,1,),datetime(2017,3,1,),)
+        xlm = (datetime(2017,2,15,),datetime(2017,3,1,),)
         k = 'HEYM28'
         figname = 'plt_xmpl_2'
-
+    
     if plt_xmpl_3:
         xlm = (datetime(2016,10,1,),datetime(2016,10,10,),)
         k = 'FIDL-2'
         figname = 'plt_xmpl_3'
-
+    
     if plt_xmpl_4:
         xlm = (datetime(2019,1,8,),datetime(2019,3,28,),)
         k = 'DRAXX-4'
         figname = 'plt_xmpl_4'
-
+        n_out = 2
+    
     if plt_xmpl_5:
         xlm = (datetime(2021,1,25,),datetime(2021,1,31,),)
         k = 'SCCL-2'
         figname = 'plt_xmpl_5'
-
+    
     if plt_xmpl_n:
         xlm = (datetime(2021,1,25,),datetime(2021,1,31,),)
         k = _CHANGEME_
         figname = _CHANGEME_
+        n_out = 3 # up to 3
+        minmax = BINARY
     
     # If needed, this version can re-run the analysis for a shorter period
     ds,de = xlm
@@ -459,19 +500,23 @@ if plt_xmpl_1 or plt_xmpl_2 or plt_xmpl_3 or plt_xmpl_4 \
 
     fig, ax = plt.subplots(figsize=(9,3.2))
     _ = [plt.plot_date(drange,mo2x(psrn2id[k])[:,ii],'o-',mfc='None',
-                                        ms=2*(1+ii),) for ii in range(3)]
-    _ = [plt.plot_date(drange,mo2x(psrn2id[k])[:,3+ii],'o-',mfc='None',
-                                        ms=2*(1+ii),) for ii in range(3)]
+                label=lbl,ms=2*(1+ii),) 
+                    for ii,lbl in enumerate(['Plann','Frcd','Tot',][:n_out])]
+    
+    if minmax:
+        _ = [plt.plot_date(drange,mo2x(psrn2id[k])[:,3+ii],'o-',mfc='None',
+                label=lbl,ms=2*(1+ii),) 
+                    for ii,lbl in enumerate(['FrcdX','PlanX','TotX',][:n_out] )]
+    
     # plt.plot_date(drange,mo2x(psrn2id[k])[:,:3],'.-',mfc='None',)
     # plt.plot_date(drange,mo2x(psrn2id[k])[:,3:],'.-',mfc='None',)
     plt.title(f"{cc_}, Generator: {k} ({psrn2id[k]})")
     plt.xlabel('Datetime (UTC)',)
     plt.ylabel('Capacity reduction, MW')
-    plt.legend(['Plann','Frcd','Tot','FrcdX','PlanX','TotX',],
-                title='Outage Type',fontsize='small',loc=(1.02,0.25,),)
+    plt.legend(title='Outage Type',fontsize='small',loc=(1.02,0.25,),)
     plt.xlim(xlm)
     if sf:
-        sff(figname)
+        sff(figname,sd=fig_sd,pdf=True,)
 
     tlps()
 
