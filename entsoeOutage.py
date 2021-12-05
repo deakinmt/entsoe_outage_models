@@ -56,8 +56,6 @@ av_model = 'ecr'
 
 # Load the data and get the clock & keys
 APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
-drange,dpsX,dpsXx = eomf.load_dps(ds,de,cc,sd,rerun=0,save=0,)
-drange, moX, moXx, mo2x = eomf.load_mouts(ds,de,cc,sd,)
 psrn2id = {mm[k]['psrName']:k for k in mm.keys()}
 
 # Note: using the outage generator requires data to be downloaded

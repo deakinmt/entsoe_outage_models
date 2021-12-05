@@ -1157,19 +1157,23 @@ class bzOutageGenerator():
         'wind_onshore':None,
     }
     
-    def __init__(self,av_model='ecr',):
+    def __init__(self,av_model='ecr',fleet_mode='all',):
         """Initialise bzOutageGenerator class.
         
-        Options for the av_model are:
+        av_model options:
         - 'elexon', based on the LOLP methodology Table 4;
         - 'ecr', based on the monthly mean values from the ECRs;
         - 'flat', all values are trivially unity;
         - None, uses 'elexon'.
         
+        fleet_mode options:
+        - 'all', 'cc' for using all generators, or only those from that country
+            for building the generator fleets self.fleets.
+        
         """
         self.set_avlbty(av_model,)
         self.set_trn_avl()
-        self.getGeneratorPortfolios()
+        self.getGeneratorPortfolios(fleet_mode,)
     
     def build_unavl_model(self,nt=24*7*20*1,flt=None,yr=2020,
                                                 assign=True,seed=None,):
@@ -1391,11 +1395,15 @@ class bzOutageGenerator():
         """Set the one-hour transition probability."""
         self.trn_avl = avlbty_elexon
     
-    def getGeneratorPortfolios(self,):
+    def getGeneratorPortfolios(self,fleet_mode,):
         """Get the generator portfolios for all countries using entsoe.
         
         For most of these, self._.ccs lists the countries present for 
         iterating over.
+        
+        Inputs
+        ---
+        fleet_mode - gets passed into getGenFleets for each country.
         
         Sets
         ---
@@ -1472,8 +1480,11 @@ class bzOutageGenerator():
                 self.nsePng[cc][pmap] = [[vf(r[heads[0].index(k)]) 
                                for k,vf in pngHeads.items()] for r in d_pmap]
         
+        # Set the list of the portfolio of all generators
+        self.getAllGenList()
+        
         for cc in self.nsePng.ccs:
-            self.fleets[cc] = self.getGenFleets(cc)
+            self.fleets[cc] = self.getGenFleets(cc,mode=fleet_mode,)
     
     @staticmethod
     def pwr2fleet(ppwrs,val):
@@ -1484,14 +1495,34 @@ class bzOutageGenerator():
         gen_sub = val - sum(ppwrs_list[:isel])
         return np.r_[ppwrs_list[:isel],gen_sub]
     
-    def getGenFleets(self,cc,vbs=False,):
-        """Get the generator fleets using the LILO method for system cc."""
+    def getAllGenList(self,):
+        """Set self.allGenList as the list of all generators from all countries.
+        
+        Uses self.nsePng for this.
+        """
+        self.allGenList = Bunch({'ccs':self.nsePng.ccs})
+        ipwr = self.nsePng.head.index('nomP')
+        for vv in self.nseInPrd.r[:-1]:
+            # Get the generator fleets - weirdly, there is no lignite?
+            vvpng = 'Fossil Hard coal' if vv=='Fossil Brown coal/Lignite' \
+                                                                    else vv
+            self.allGenList[vv] = [r[ipwr] for cc in self.nsePng.ccs for 
+                                            r in self.nsePng[cc][vvpng]]
+            if len(self.allGenList[vv])==0:
+                print(f'Warning - no data for scnFleets for {vv}!')
+    
+    def getGenFleets(self,cc,vbs=False,mode='all',):
+        """Get the generator fleets using the LILO method for system cc.
+        
+        Mode: if 'cc', only use the country generators for LILO; otherwise, if
+        'all' then use all generators.
+        """
         
         # Get the nseInPrd table andlist of generators
         cc = 'IE' if cc=='I0' else cc # use same data for Irish codes
         cc_tbl = self.nseInPrd[cc]
         rr = self.nseInPrd.r[:-1] # ignore Total Grand Capacity
-        gens = self.nsePng[cc]
+        gens = self.nsePng[cc] if mode=='cc' else self.allGenList
         
         # indexes and dates
         idate,ipwr = [self.nsePng.head.index(vv) 
@@ -1501,21 +1532,26 @@ class bzOutageGenerator():
         for j,yr in enumerate(self.nseInPrd.h):
             for i,r in enumerate(rr):
                 if cc_tbl[i,j]>0 and len(gens[r])>0:
-                    # evaluate if gens existed at the start of the yr
-                    igensel = [i for i,g in enumerate(gens[r]) 
+                    if mode=='cc':
+                        # evaluate if gens existed at the start of the yr
+                        igensel = [i for i,g in enumerate(gens[r]) 
                                                     if g[idate].year<yr]
-                    igenout = [i for i in range(len(gens[r])) 
+                        igenout = [i for i in range(len(gens[r])) 
                                                     if i not in igensel]
-                    gensr_ = np.array(gens[r])
-                    
-                    # get backwards/forward date orders for igensel/igenout
-                    isrt = np.argsort([gensr_[ii,idate] 
-                                                    for ii in igensel])[::-1] 
-                    isrt_out = np.argsort([gensr_[ii,idate] for ii in igenout])
-                    
-                    pwrs = gensr_[igensel][isrt][:,ipwr].astype(float)
-                    pwrs_out = gensr_[igenout][isrt_out][:,ipwr].astype(float)
-                    pwrs_all = np.r_[pwrs,pwrs_out]
+                        gensr_ = np.array(gens[r])
+                        
+                        # get backwards/forward date orders for igensel/igenout
+                        isrt = np.argsort([gensr_[ii,idate] 
+                                                for ii in igensel])[::-1] 
+                        isrt_out = np.argsort([gensr_[ii,idate] 
+                                                        for ii in igenout])
+                        
+                        pwrs = gensr_[igensel][isrt][:,ipwr].astype(float)
+                        pwrs_out=gensr_[igenout][isrt_out][:,ipwr].astype(float)
+                        pwrs_all = np.r_[pwrs,pwrs_out]
+                    elif mode=='all':
+                        pwrs = self.allGenList[r]
+                        pwrs_all = pwrs
                     
                     if sum(pwrs)>cc_tbl[i,j]:
                         # If there are sufficient generators, 
