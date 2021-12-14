@@ -18,10 +18,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 from numpy.random import MT19937, Generator, SeedSequence
-from govuk_bank_holidays.bank_holidays import BankHolidays
 from matplotlib import cm
-from cmocean import cm as cmo
-from hsluv import hsluv_to_rgb
 
 # run exec(repl_import) to import a set of standard funcs from here
 repl_list = """from eom_utils import es, csvIn, ppd, oss, tlps, saveFigFunc,\

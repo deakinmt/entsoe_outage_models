@@ -28,7 +28,7 @@ def rngSeed(seed=0,):
     
     Used seed = None for a random state.
     """
-    if seed is None:
+    if seed is not None:
         return Generator(MT19937(SeedSequence(seed)))
     else:
         return Generator(MT19937())
@@ -1078,6 +1078,47 @@ avlbty_elexon = {
     None:np.nan,
     }
 
+elexon_tidy = {
+    'oil':'Oil',
+    'ocgt':'OCGT',
+    'nuclear':'Nuclear',
+    'hydro':'Hydro',
+    'pumped_storage':'Pumped Hydro',
+    'ccgt':'CCGT',
+    'coal':'Coal',
+}
+
+ecr_tidy = {
+    'steam_oil':'Oil',
+    'ocgt':'OCGT',
+    'nuclear':'Nuclear',
+    'hydro':'Hydro',
+    'pumped_storage':'Pumped Hydro',
+    'ccgt':'CCGT',
+    'coal':'Coal',
+    'biomass':'Biomass',
+    'waste':'Waste',
+    'chp':'CHP',
+    'dsr':'DSR',
+    'recip':'Recip. Engine',
+    'ess_05':'ESS (0.5 hr)',
+    'ess_10':'ESS (1.0 hr)',
+    'ess_15':'ESS (1.5 hr)',
+    'ess_20':'ESS (2.0 hr)',
+    'ess_25':'ESS (2.5 hr)',
+    'ess_30':'ESS (3.0 hr)',
+    'ess_35':'ESS (3.5 hr)',
+    'ess_40':'ESS (4.0 hr)',
+    'ess_45':'ESS (4.5 hr)',
+    'ess_50':'ESS (5.0 hr)',
+    'ess_55':'ESS (5.5 hr)',
+    'wind_onshore':'Wind (onshore)',
+    'wind_offshore':'Wind (offshore)',
+    'solar':'Solar',
+}
+
+
+
 cnvtr_elexon = {
         'Biomass':'coal',
         'Fossil Brown coal/Lignite':'coal',
@@ -1204,21 +1245,26 @@ class bzOutageGenerator():
             }
             
             # Build the vector of generator sizes
-            ng_all = len(unavl[cc]['v'])
-            unavl[cc]['ua'] = np.zeros((ng_all,nt),dtype=bool)
+            unavl[cc]   ['ua'] = np.zeros((len(unavl[cc]['v']),nt), dtype=bool)
             
             # AA = [] # <-- alternative method
             i0 = 0
             for k,v in fleet_yr.items():
-                ng = len(v)
+                # Calculate the transition probabilities
+                # Billinton + Allan Engineering Systems, 9.2.1
                 k_ = self.cnvtr[k]
                 k__ = self.cnvtr_ecr2elexon[k_]
+                lmd = 1-self.st_avl[k__]
+                mu = lmd*self.avlbty[k_]/(1-self.avlbty[k_])
+                
+                # Update the unavailibility matrix
+                ng = len(v)
                 unavl[cc]['ua'][i0:i0+ng] = self.build_unavl_matrix(
-                        self.trn_avl[k__],self.avlbty[k_],ng,nt,seed=seed,)
+                                    lmd,mu,self.avlbty[k_],ng,nt,seed=seed,)
                 i0+=ng
                 # <-- alternative method
                 # AA.append(self.build_unavl_matrix(
-                            # self.trn_avl[k__],self.avlbty[k_],ng,nt))
+                            # lmd,mu,ng,nt))
             
             # Also set the index of generators that have non-zero unavailability
             unavl[cc]['isel'] = np.where(
@@ -1309,7 +1355,7 @@ class bzOutageGenerator():
         return sctXt(x=data,t=tms)
     
     @staticmethod
-    def build_unavl_matrix(trn_avl,lt_avl,ng,nt,seed=None,):
+    def build_unavl_matrix(lmd,mu,lt_avl,ng,nt,seed=None,):
         """Build an unavailability matrix, with i,j = 1 if in outage.
          
         Uses the geometric function to simulate the number of transitions to 
@@ -1320,7 +1366,8 @@ class bzOutageGenerator():
         
         Inputs
         ---
-        trn_avl - the one-transition availbility
+        lmd - the transition rate, in to to out of service
+        mu - the transition rate, out to in service
         lt_avl - the long-term availability
         ng - number of generators
         nt - number of time periods to return
@@ -1328,25 +1375,20 @@ class bzOutageGenerator():
         
         Returns
         ---
-        unavl - ng x nt matrix with 1 in unavailable.
+        unavl - ng x nt matrix with 1 if unavailable.
         """
         # Random number generation initialisation
-        rng_ = rngSeed(seed=seed,)
-        seed = rng.integers(0,2**32)
+        rng_ = rng if seed is None else rngSeed(seed=seed,) 
+        seed = rng_.integers(0,2**32)
         
-        # If in trn_avl or 
-        if ng==0 or np.isnan(trn_avl):
+        if ng==0 or np.isnan(lmd):
             return np.zeros((ng,nt,))
         
-        # Calculate the transition probabilities
-        lmd = 1-trn_avl
-        mu = lmd*lt_avl/(1-lt_avl)
-        
         # Build the Markov Chaing probability matrix and initial state
-        PP = [[trn_avl,1-trn_avl],[mu,1-mu]]
         state_init = rng_.choice([0,1],size=(ng,),p=[lt_avl,1-lt_avl])
         
         # Simulate the outages
+        PP = [[1-lmd,lmd],[mu,1-mu]]
         mc = qe.MarkovChain(PP)
         unavl = mc.simulate(ts_length=nt,init=state_init,random_state=seed,)
         
@@ -1393,7 +1435,7 @@ class bzOutageGenerator():
     
     def set_trn_avl(self,):
         """Set the one-hour transition probability."""
-        self.trn_avl = avlbty_elexon
+        self.st_avl = avlbty_elexon
     
     def getGeneratorPortfolios(self,fleet_mode,):
         """Get the generator portfolios for all countries using entsoe.

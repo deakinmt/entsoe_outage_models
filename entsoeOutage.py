@@ -1,5 +1,6 @@
 import os, sys, pickle, types, zipfile
 import pandas as pd
+from statsmodels.tsa.stattools import acf
 
 from timeit import default_timer as timer
 
@@ -11,7 +12,8 @@ from download_config import dstart, dend, dstart_xtra, dend_xtra, dT
 ds, de = dstart_xtra, dend_xtra
 from scipy import sparse
 from eom_utils import aMulBsp
-fig_sd = r"C:\Users\nmd155\OneDrive - Newcastle University\papers\pmaps2022\figures"
+fig_sd = r"C:\Users\nmd155\OneDrive - Newcastle University\papers\pmaps2022\outage_paper\figures"
+tbl_sd = r"C:\Users\nmd155\OneDrive - Newcastle University\papers\pmaps2022\outage_paper\tables"
 
 # Select the countries to use
 ccs = ['GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'DK', 'ES', 'NO', 'DE',]
@@ -22,7 +24,7 @@ process_DPs = 0
 save_outputs = 0
 
 # Plotting options
-fig_entsoeout = 0
+fig_entsoeout = 0 # change cc below to change output
 fig_entsoePs = 0
 fig_entsoePs_minmax = 0
 fig_entsoePs_ratio = 0
@@ -32,6 +34,7 @@ fig_hydro = 0
 # Misc figures
 pltTsGenerator = 0
 pltTsCcWinters = 0
+pltTsXmplRuns = 0
 pltOutageChanges = 0
 pltOutageChanges_v2 = 0
 
@@ -88,17 +91,22 @@ if pltOutageChanges:
         tlps()
 
 if pltOutageChanges_v2:
-    drange,dpsX,dpsXx = eomf.load_dps(ds,de,'GB',sd,rerun=False)
     # Only do GB Forced for now.
-    for xx,nm in zip([dpsX['f'],dpsX['t']][:1],['Forced','Total',][:1]):
-        dpss = [self.getWinters(sctXt(t=drange,x=xx),yrStt=yr,nYr=1,) 
-                                                    for yr in range(2016,2021)]
+    cc = 'GB'
+    dr1,dpsX,dpsXx = eomf.load_dps(ds,de,cc,sd,rerun=False)
+    dr2 = np.arange(datetime(2000,11,1),datetime(2021,4,1),timedelta(0,3600,))
+    ua = self.build_unavl_model(assign=False,seed=0,nt=len(dr2),)
+    mdl = ua[cc]['v'].dot(ua[cc]['ua'])
+    
+    hrs = np.arange(24)
+    for xx,dr,nm in zip([dpsX['f'],mdl,],[dr1,dr2],['fcd','mdl',]):
+        dpss = [self.getWinters(sctXt(t=dr,x=xx),yrStt=yr,nYr=1,) 
+                                            for yr in range(2000,2021)]
         
         qntl = 1 - (1/24)
         qntls_ = [1/24,(1/(24*7)),1/(24*30),1/(24*7*20)][::-1]
         qntls = [[qq,1-qq] for qq in qntls_]
         lbls = ['1 per day','1 per week','1 per month','1 per winter',][::-1]
-        hrs = np.arange(24)
         qqs = [[[0,0]] for i in range (len(qntls))]
         for hr in hrs[1:]:
             dF = np.concatenate([dps.x[hr:] - dps.x[:-hr] for dps in dpss])/1e3
@@ -257,7 +265,7 @@ if fig_entsoePs or fig_entsoePs_minmax or fig_entsoePs_ratio:
 
 if fig_entsoeout:
     # Plotting reports from individual days
-    isel = 150
+    isel = {'GB':150,'IE':200}[cc]
     kk = kks[isel]
     mmRdr = list(APs[kk].keys())
 
@@ -276,12 +284,10 @@ if fig_entsoeout:
 
     lbls = [mm[m]['psrName'] for m in mmRdr]
     plt.yticks(np.arange(len(mmRdr)),labels=lbls)
-    plt.title(
-        f'Reporting Window: {eomf.s2d(kks[isel])} - {eomf.s2d(kks[isel+1])}')
     ylm = plt.ylim()
     plt.vlines([eomf.s2d(kks[isel]),eomf.s2d(kks[isel+1])],*ylm,
                                                 linestyles='dashed')
-    plt.xlim((eomf.s2d(kks[isel-4]),eomf.s2d(kks[isel+5]),))
+    plt.xlim((eomf.s2d(kks[isel-3]),eomf.s2d(kks[isel+4]),))
     plt.ylim(ylm)
     plt.xlabel('Datetime')
     plt.ylabel('Resource mRID')
@@ -363,16 +369,20 @@ if pltTsGenerator:
     bog = eomf.bzOutageGenerator()
     
     # transition probability - ccgt
-    trn_avl = 0.989
+    st_avl = 0.989
     lt_avl = 0.9
+    
+    # From 
+    lmd = 1-st_avl
+    mu = lmd*lt_avl/(1-lt_avl)
     
     n_yrs = 1
     ng = 100
     nt = n_yrs*20*7*24
-
+    
     fig, axs = plt.subplots(figsize=(7.3,6.5),nrows=3,sharey=True,)
     for ax,ng in zip(axs,[10,30,100]):
-        avl = bog.build_unavl_matrix(trn_avl,lt_avl,ng,nt,)
+        avl = bog.build_unavl_matrix(lmd,mu,lt_avl,ng,nt,)
         asd = np.ones(ng).dot(avl)
         
         ax.plot(np.arange(len(asd))/(24*7),100*asd/ng,
@@ -388,6 +398,11 @@ if pltTsGenerator:
     
     out_avl = 1 - (np.sum(avl)/(ng*avl.shape[1]))
     print(out_avl)
+    
+    state0 = [np.where(aa==0)[0][:-1] for aa in avl]
+    trn_mean = [sum(avl[i,aa+1])/len(aa) for i,aa in enumerate(asd)]
+    st_avl_out = 1 - np.mean(trn_mean)
+    print(st_avl_out)
 
 if pltTsCcWinters:
     ua = self.build_unavl_model(assign=False,seed=0,)
@@ -407,6 +422,25 @@ if pltTsCcWinters:
             plt.close()
         else:
             tlps()
+
+if pltTsXmplRuns:
+    cc = 'FR'
+    nt = 24*20
+    for seed in 1000*np.arange(3):
+        ua = self.build_unavl_model(assign=False,seed=seed,nt=nt,)
+        outages = ua[cc]['v'].dot(ua[cc]['ua'])/1e3
+        plt.plot(np.arange(len(outages))/(24),outages,)
+    
+    plt.xlabel('Time, days')
+    plt.ylabel(f'Modelled outages ({cc} winter), GW')
+    ylm = plt.ylim()
+    plt.ylim((-0.3,ylm[1]*1.04,),)
+    plt.xlim((-0.01,1.003*nt/24,))
+    plt.xticks(np.arange(0,24,4),)
+    if sf:
+        sff(f'pltTsXmplRuns',sd=fig_sd,pdf=True,)
+    
+    tlps()
 
 if plt_approach_xmpl_vvmults or plt_approach_xmpl_contiguous:
     cc_ = 'FR'
@@ -537,5 +571,33 @@ if plt_xmpl_1 or plt_xmpl_2 or plt_xmpl_3 or plt_xmpl_4 \
     # SCCL-2 Jan 2021 (plt_xmpl_5)
     # https://transparency.entsoe.eu/outage-domain/r2/unavailabilityOfProductionAndGenerationUnits/show?name=&defaultValue=false&viewType=TABLE&areaType=CTA&atch=false&dateTime.dateTime=26.01.2021+00:00|UTC|DAY&dateTime.endDateTime=31.01.2021+00:00|UTC|DAY&CTY|10Y1001A1001A92E|MULTI=CTY|10Y1001A1001A92E|MULTI&area.values=CTY|10Y1001A1001A92E!CTA|10Y1001A1001A016&area.values=CTY|10Y1001A1001A92E!CTA|10YGB----------A&assetType.values=PU&assetType.values=GU&outageType.values=A54&outageType.values=A53&outageStatus.values=A05&masterDataFilterName=SCCL-2&masterDataFilterCode=&dv-datatable_length=10
 
+
+if tbl_fuel_mttrs:
+    # table of availability, MTTR
+    kks = list(eomf.ecr_tidy.keys())
+    fleet_yr = self.fleets['GB'][2020]
+    mttrs,mttfs = [{} for i in range(2)]
+    rows = []
+    k_s = []
+    for k,v in fleet_yr.items():
+        # Calculate the transition probabilities
+        # Billinton + Allan Engineering Systems, 9.2.1
+        k_ = self.cnvtr[k]
+        k__ = self.cnvtr_ecr2elexon[k_]
+        lmd = 1-self.st_avl[k__]
+        mu = lmd*self.avlbty[k_]/(1-self.avlbty[k_])
+        mttfs[k] = 1/lmd
+        mttrs[k] = 1/mu
+        if k_ in kks and k_ not in k_s and not k__ is None:
+            rows.append([eomf.ecr_tidy[k_],
+                                f'{self.avlbty[k_]:.2f}',f'{mttrs[k]:.1f}',])
+            k_s.append(k_)
+    
+    caption = 'Availability factors and mean time to repair (MTTR) by fuel type.'
+    label='tbl_fuel_mttrs'
+    heading=['Fuel type','Availability $A$','MTTR']
+    data = rows
+    TD = tbl_sd
+    basicTblSgn(caption,label,heading,data,TD,)
 
 
