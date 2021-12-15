@@ -611,19 +611,24 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,ei=True,):
     Returns
     ---
     drange - the clock
-    dpsX - the forced / planned / total outages
+    dpsX - the forced / planned / total outages min additional outages
     dpsXx - the forced / planned / total outages max additional outages
+    dpsXr - the 'real' forced / planned / total outages (as in PMAPS)
     """
     sd_ = os.path.join(sd,'output_cache','DPs',)
     _ = os.mkdir(sd_) if not os.path.exists(sd_) else None
     fn_ = os.path.join(sd_,f'{cc}_APs{d2s(dstart)}-{d2s(dend)}.pkl')
+    
+    dps2dpsXr = lambda dpsX, dpsXx: {k:dpsX[k] + 0.5*dpsXx[k] \
+                                                for k in ['p','f','t',]}
     
     # If not rerun, reload the cached data and return
     if not rerun:
         with open(fn_,'rb') as file:
             data = pickle.load(file)
         print(data['readme'])
-        return [data[k] for k in ['drange','dpsX','dpsXx',]]
+        rtns = [data[k] for k in ['drange','dpsX','dpsXx',]]
+        return rtns + [dps2dpsXr(data['dpsX'],data['dpsXx'],),]
     
     print(f'========== Processing {cc} APs...')
     APs, mm, kks, kksD = load_aps(cc,sd,rerun=False,save=False)
@@ -663,7 +668,7 @@ def load_dps(dstart,dend,cc,sd,rerun=True,save=False,ei=True,):
             pickle.dump({'drange':drange,'moX':moX,'moXx':moXx,
                                                 'readme':readme},file)
     
-    return drange, dpsX, dpsXx
+    return drange, dpsX, dpsXx, dps2dpsXr(dpsX,dpsXx,)
 
 def load_mouts(dstart,dend,cc,sd,):
     """Load the individual generator outputs moF, moP.
@@ -678,6 +683,7 @@ def load_mouts(dstart,dend,cc,sd,):
     moX - the planned/forced/total outages
     moXx - the planned/forced/total possible additional outages
     mo2x - util func for converting moX, moXx to time series
+    mo2x_real - as mo2x except only has the definition in the pmaps paper.
     """
     sd_ = os.path.join(sd,'output_cache','DPs',)
     fn_ = os.path.join(sd_,f'{cc}_APs{d2s(dstart)}-{d2s(dend)}_ivdl.pkl')
@@ -692,8 +698,14 @@ def load_mouts(dstart,dend,cc,sd,):
         
         Defined in the eomf.load_mouts function to use the correct dict/drange.
         
-        Input: mmrid - generator key for moF/moP.
-        Returns: xx - (nt,2)-sized np array, with ith row as [moF,moP,moFx,moPx]
+        Note - uses the earlier definition, where 'the' outages in the first 
+        three columns are the minimum value
+        
+        Input: 
+        mmrid - generator key for moF/moP/moT.
+        
+        Returns: 
+        xx - (nt,6)-sized np array, with ith row as [p,f,t,pX,fX,tX]
         """
         xx = np.zeros((len(dout[0]),6))
         xvals = [dout[ii][j] for ii in [1,2] for j in ['p','f','t',]]
@@ -701,7 +713,15 @@ def load_mouts(dstart,dend,cc,sd,):
                                             for ii,mo in enumerate(xvals)]
         return xx
     
-    return dout + [mo2x]
+    def mo2x_real(k):
+        """Return the (nt,3) matrix of outages for generator k using mo2x.
+        
+        See help mo2x for main help on this; returns xx[:,:3] + 0.5*xx[:,3:]
+        """
+        xx = mo2x(k)
+        return npa(xx[:,:3]) + 0.5*xx[:,3:]
+    
+    return dout + [mo2x,mo2x_real]
 
 def process_aps(APsK,dlo,dhi,mm,excl_intermittent=True,):
     """Use APs to find the forced and unforced outages.
