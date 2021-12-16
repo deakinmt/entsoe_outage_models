@@ -21,7 +21,7 @@ fs_dbl = (2.8,2.8)
 # Select the countries to use
 ccs = ['GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'DK', 'ES', 'NO', 'DE',]
 
-# Process the data to create the 
+# Process the data to create the data that can be quickly loaded.
 process_APs = 0
 process_DPs = 0
 save_outputs = 0
@@ -62,6 +62,7 @@ sf = 0
 rerun = 0
 cc = 'GB' # opts - 'GB', 'IE', 'I0', 'BE', 'NL', 'FR', 'ES', 'DK', 'DE',
 av_model = 'ecr'
+st_model = 'edwards' # 'edwards' or 'elexon'
 
 # Load the data and get the clock & keys
 APs, mm, kks, kksD = eomf.load_aps(cc,sd,rerun=rerun,save=True)
@@ -69,7 +70,7 @@ psrn2id = {mm[k]['psrName']:k for k in mm.keys()}
 
 # Note: using the outage generator requires data to be downloaded
 # as described in the readme.
-self = eomf.bzOutageGenerator(av_model=av_model,)
+self = eomf.bzOutageGenerator(av_model=av_model,st_model=st_model,)
 
 if pltOutageChanges:
     drange,dpsX,dpsXx,dpsXr = eomf.load_dps(ds,de,'GB',sd,rerun=False)
@@ -126,11 +127,12 @@ if pltOutageChanges_v2:
             _ = [plt.plot(hrs,listT(qq)[i],'k-',lw=0.25) for i in range(2)]
         
         if nm=='tot':
-            plt.legend(fontsize='small',)
-            
+            plt.legend(fontsize='small',handlelength=1,
+                        ncol=2,columnspacing=0.8,handletextpad=0.3,)
+        
         set_day_label()
         plt.xlim((0,23))
-        plt.ylim((-13.5,13.5))
+        plt.ylim((-11.5,11.5))
         plt.xlabel('Hours since $\\tau$')
         plt.ylabel(f'Change in {ccsel} Outages (+ve as\n greater outage), GW',)
         if sf:
@@ -439,6 +441,7 @@ if pltTsGenerator:
     # From 
     lmd = 1-st_avl
     mu = lmd*lt_avl/(1-lt_avl)
+    mttr = 1/mu
     
     n_yrs = 1
     ng = 100
@@ -464,9 +467,24 @@ if pltTsGenerator:
     print(out_avl)
     
     state0 = [np.where(aa==0)[0][:-1] for aa in avl]
-    trn_mean = [sum(avl[i,aa+1])/len(aa) for i,aa in enumerate(asd)]
+    trn_mean = [sum(avl[i,aa+1])/len(aa) for i,aa in enumerate(state0)]
     st_avl_out = 1 - np.mean(trn_mean)
     print(st_avl_out)
+    
+    # diffs = [[np.where(np.diff(aa)==da)[0] for aa in avl] for da in [1,-1]]
+    diffs = [np.where(np.diff(aa)==1)[0] for aa in avl]
+    
+    evnts = []
+    for aa,dd in zip(avl,diffs):
+        evnts.append([])
+        for d in dd:
+            try:
+                evnts[-1].append(np.where(np.diff(aa[d:])==-1)[0][0])
+            except:
+                pass
+    
+    mttr_calc = np.mean(np.concatenate(evnts))
+    print(mttr_calc)
 
 if pltTsCcWinters:
     ua = self.build_unavl_model(assign=False,seed=0,)

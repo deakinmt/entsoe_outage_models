@@ -1083,6 +1083,19 @@ cnvtr_ecr = {
         'Wind Onshore':'wind_onshore',
         }
 
+
+# From Edwards + Dent, SEGAN 2017 Assessing...
+edwards_mttr = {
+    'coal':40,
+    'ocgt':50,
+    'ccgt':50,
+    'oil':50,
+    'nuclear':150,
+    'hydro':20,
+    'pumped_storage':20,
+    None:np.nan,
+}
+
 # Table 4, BSC Loss of Load Probability Calculation Statement Version 2, 2019
 # https://www.elexon.co.uk/documents/bsc-codes/lolp/loss-of-load-probability-calculation-statement/
 # Accessed 10/10/21
@@ -1218,7 +1231,7 @@ class bzOutageGenerator():
         'wind_onshore':None,
     }
     
-    def __init__(self,av_model='ecr',fleet_mode='all',):
+    def __init__(self,av_model='ecr',fleet_mode='all',st_model='elexon',):
         """Initialise bzOutageGenerator class.
         
         av_model options:
@@ -1231,10 +1244,14 @@ class bzOutageGenerator():
         - 'all', 'cc' for using all generators, or only those from that country
             for building the generator fleets self.fleets.
         
+        st_model options:
+        - 'elexon', uses the short term elexon options
+        - 'edwards', uses the data from Edwards + Dent et al
+        
         """
         self.set_avlbty(av_model,)
-        self.set_trn_avl()
         self.getGeneratorPortfolios(fleet_mode,)
+        self.set_trn_avl(st_model,)
     
     def build_unavl_model(self,nt=24*7*20*1,flt=None,yr=2020,
                                                 assign=True,seed=None,):
@@ -1453,9 +1470,24 @@ class bzOutageGenerator():
         _ = [self.avlbty_conv.__setitem__(k,0) for k in self.avlbty
                                                         if k in not_conv]
     
-    def set_trn_avl(self,):
-        """Set the one-hour transition probability."""
-        self.st_avl = avlbty_elexon
+    def set_trn_avl(self,st_model,):
+        """Set the one-hour transition probability.
+        
+        If an MTTR is the option, then converts this based on teh availability.
+        """
+        if st_model=='elexon':
+            self.st_avl = avlbty_elexon
+        elif st_model=='edwards':
+            # Based on the inverse of this in build_unavl_model
+            mttr = edwards_mttr
+            self.st_avl = {}
+            flt = self.fleets['GB'][2020]
+            for k in flt.keys():
+                k_ = self.cnvtr[k]
+                k__ = self.cnvtr_ecr2elexon[k_]
+                A = self.avlbty[k_]
+                mttr = edwards_mttr[k__]
+                self.st_avl[k__] = 1 - ( (1 -A)/(mttr*A) )
     
     def getGeneratorPortfolios(self,fleet_mode,):
         """Get the generator portfolios for all countries using entsoe.
