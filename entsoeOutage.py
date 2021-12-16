@@ -43,6 +43,7 @@ tbl_fuel_mttrs = 0
 pltTsXmplRuns = 0
 pltOneWeekXmpl = 0
 tbl_acf = 0
+pltTtlFcdTs = 0
 
 # Plotting examples of how the algorithm works
 plt_approach_xmpl_vvmults = 0
@@ -282,7 +283,7 @@ if pltOneWeekXmpl or pltTsXmplRuns:
     drange,_,_,dpsXr = eomf.load_dps(ds,de,cc,sd,rerun=False)
     ndys = 7
     month = 2
-    for yr in range(2016,2021):
+    for yr in range(2017,2022):
         i0 = np.argmax(drange==datetime(yr,month,1,))
         plt.plot(np.arange(24*ndys)/24,dpsXr['t'][i0:i0+24*ndys]/1e3,
                                                             label=str(yr))
@@ -695,3 +696,32 @@ if tbl_acf:
         \cmidrule(l{0.6em}r{0.9em}){2-3} \cmidrule(l{0.6em}r{0.9em}){4-5} \cmidrule(l{0.6em}r{0.9em}){6-7} \cmidrule(l{0.6em}r{0.9em}){8-9} 
     & Data & Mdl. & Data & Mdl. & Data & Mdl. & Data & Mdl.\\"""
     basicTblSgn(caption,label,heading,data,TD,headRpl,r0=True,)
+
+if pltTtlFcdTs:
+    ccsel = 'GB'
+    drange, _, _, dpsXr = eomf.load_dps(ds,de,ccsel,sd,rerun=False)
+    
+    fig, ax = plt.subplots(figsize=fs_sngl_)
+    ylms = (-0.5,max(dds(dpsXr['t'],24)/1e3)*1.15)
+    
+    for kk,lbl,clr in zip(
+            ['p','f','t',],['Planned','Forced','Total',],['C0','C1','k',]):
+        plt.plot_date(drange[::24],dds(dpsXr[kk],24)/1e3,
+                                                f'{clr}-',label=lbl,lw=0.7,)
+    
+    plt.ylabel('Mean daily outages, GW')
+    plt.xlabel('Time, UTC')
+    plt.xlim((drange[0],drange[-1]))
+    for yr in range(min(drange).year,max(drange).year+1):
+        plt.fill_between(
+            [datetime(yr,11,eomf.get_nov_day(yr)) + timedelta(td) 
+                for td in [0,20*7]],[ylms[0]]*2,[ylms[1]]*2,
+                                    color='k',alpha=0.1,)
+    
+    ylm = plt.ylim(ylms)
+    plt.xticks(rotation=30,)
+    plt.legend(title=f'Outage type',fontsize='small',loc=(1.03,0.25,))
+    if sf:
+        sff('pltTtlFcdTs',sd=fig_sd,pdf=True,)
+    
+    tlps()
