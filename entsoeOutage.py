@@ -12,8 +12,8 @@ from download_config import dstart, dend, dstart_xtra, dend_xtra, dT
 ds, de = dstart_xtra, dend_xtra
 from scipy import sparse
 from eom_utils import aMulBsp
-fig_sd = r"C:\Users\nmd155\OneDrive - Newcastle University\papers\pmaps2022\outage_paper\figures"
-tbl_sd = r"C:\Users\nmd155\OneDrive - Newcastle University\papers\pmaps2022\outage_paper\tables"
+fig_sd = r"_path_to_output_figures_"
+tbl_sd = r"_path_to_output_tables_"
 
 fs_sngl_ = (4.8,2.8)
 fs_dbl = (2.8,2.8)
