@@ -3,68 +3,11 @@
 A package for building time-series models of generator outages
 based on NW European countries.
 
-===
-TO DO
+Note
 ---
-[x] how to most suitably load in the require production data
-[x] check we have all countries 
-[x] check if vvmult should be used
-[x] checksums on all country outputs
-[x] exploring individual generator output errors (e.g., FR moF/moP ii=5)
-[x] exploring the flat period GB Xmas 2017
-[x] exploring the errors in GB data
-[x] exploring the negative values in the IE data
-[x] exploring discontinuity in DE, NL data
-[x] saving the individual generator outages sparse matrix
-[x] saving the output data for re-use
-[x] exploring the min-max errors
-[x] looking at outages of only conventional plant, not renewables
-[x] Miscellaneous individual checks (further plt_approach_xmpls)
-[x] Use 't' rather than 'f','p' in the outage script
-===
-
-
-Notes
----
-
-not clear at the moment if the data can be clearly reused:
-https://transparency.entsoe.eu/content/static_content/download?path=/Static%20content/terms%20and%20conditions/191025_List_of_Data_available_for_reuse_v2_cln.pdf
-
 In general, the scripts use options to select what to run - e.g.,
 entsoeOutageDownload.py line  17-24 can be changed from 0 to 1
 to enable those options.
-
-I0 refers to __, whilst IE refers to the 'old' irish datacode,
-whilst IE refers to the full SEM.
-
-Limitations
----
-L1. By default, 'outages' which result in the output being 1.33
-  times greater than the generator nominal power are neglected.
-L2. Even with L1, sometimes 'negative' outages occur (e.g., for
-  DK in early 2020, I0 in early 2019).
-L3. By default, we ignore outages on wind/solar/hydro run of river.
-L4. The reasons/convention for individual countries and what is
-  classed as a 'Forced' versus 'Planned' outage has not been
-  considered.
-L5. Forced and planned outages are considered seperately; possible
-  clashes between these are not considered (e.g., both forced and
-  planned outages occuring at the same time).
-  
-
-
-Scripts / options
----
-entsoeOutageDownload.py - a script for automating the download of 
-    outage data for individual bidding zones
-entsoeOutage.py - a script for processing the outage data into .pkl
-    files for onward analysis (e.g., creating a time series of
-    data), as well as exploring the production & generation units.
-download_config.py - various information for changing download options,
-    including the token used to call the API.
-entsoeProductionDownload.py - A script to downnload production and 
-    generation units
-
 
 Workflow
 ---
@@ -83,14 +26,38 @@ It is suggested that the data is approached in the following way:
   "BE_Installed Capacity per Production Type_201501010000-202201010000";
   These should then be saved in the directory .\entsoe_outage_data\misc\inpr\.
 
+Clear Limitations
+---
+L1. By default, 'outages' which result in the output being 1.33
+  times greater than the generator nominal power are neglected.
+L2. Even with L1, sometimes 'negative' outages occur (e.g., for
+  DK in early 2020, I0 in early 2019).
+L3. By default, we ignore outages on wind/solar/hydro run of river.
+L4. The reasons/convention for individual generators and what is
+  classed as a 'Forced' versus 'Planned' outage has not been
+  considered.
+L5. Forced and planned outages are considered seperately; possible
+  clashes between these are not considered (e.g., both forced and
+  planned outages occuring at the same time).
+  
+Scripts / options
+---
+entsoeOutageDownload.py - a script for automating the download of 
+    outage data for individual bidding zones
+entsoeOutage.py - a script for processing the outage data into .pkl
+    files for onward analysis (e.g., creating a time series of
+    data), as well as exploring the production & generation units.
+download_config.py - various information for changing download options,
+    including the token used to call the API.
+entsoeProductionDownload.py - A script to downnload production and 
+    generation units
 
 Directories
 ---
 apiDoc - various bits of documentation from entsoe's API website
-entsoeData - firectory which entsoe data is downloaded into
+entsoeData - directory which entsoe data is downloaded into
 gallery - directory to save figures by default
 misc - miscellaneous
-
 
 Other
 ---
@@ -99,7 +66,6 @@ eom_funcs.py - functions for working with the above scripts
 eom_utils.py - various util functions
 entsoe_py_data.py - various useful codes for use with the API,
     based on the useful API client entsoe-py
-
 
 Acronyms
 ---

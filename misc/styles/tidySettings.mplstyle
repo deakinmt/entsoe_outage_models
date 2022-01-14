@@ -61,18 +61,3 @@ keymap.pan: s,p
 keymap.zoom: z,o
 #keymap.xscale: s # these annoying toggle log-linear, not x/y constrained?
 #keymap.yscale: d
-
-# TESTING SCRIPT:
-# x = np.linspace(0.001,10)
-# y = np.sin(x)/x
-# plt.plot(x,y+0)
-# plt.plot(x,y+1)
-# plt.plot(x,y+2)
-# plt.plot(x,y+3)
-# plt.plot(x,y+4)
-# plt.plot(x,y+5)
-# plt.plot(x,y+6)
-# plt.legend(('hello','world','yo'))
-# plt.xlabel('Yo yo yo')
-# plt.ylabel('Wassup')
-# plt.show()

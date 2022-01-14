@@ -152,8 +152,8 @@ if process_DPs:
 save_readme = """Outage data for NW European countries, Oct 2016-Mar 2021.
 
 Data downloaded from ENTSOe's transparency platform using the 
-entsoe_outage_models repository, __LINK_HERE__ [1], supported by
-the Supergen Energy Networks Hub's CLEARHEADS Flex Fund project.
+entsoe_outage_models repository [1], supported by the Supergen Energy 
+Networks Hub's CLEARHEADS Flex Fund project.
 
 M. Deakin, November 2021
 Contact: matthew.deakin@newcastle.ac.uk
@@ -195,7 +195,7 @@ in the outage rates of the countries.
 
 References
 ---
-[1] __LINK_TO_GITHUB_HERE__
+[1] https://github.com/deakinmt/entsoe_outage_models
 [2] Commission Regulation (EU) No 543/2013 of 14 June 2013 on 
 submission and publication of data in electricity markets and 
 amending Annex I to Regulation (EC) No 714/2009 of the European 

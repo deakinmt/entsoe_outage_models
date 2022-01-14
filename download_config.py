@@ -8,4 +8,5 @@ dstart_xtra = datetime(2016,10,1)
 dend_xtra = datetime(2021,4,1) # inclusive
 dT = timedelta(0,24*3600)
 
-token = r'7b53f33d-c817-4f1c-9ed5-599b5501c529'
+token = __your_entsoe_token_here__ 
+# e.g., token = r'1a23a45a-a678-9a1a-2aa3-456a7891a234'

@@ -1,0 +1,19 @@
+===
+TO DO
+---
+[x] how to most suitably load in the require production data
+[x] check we have all countries 
+[x] check if vvmult should be used
+[x] checksums on all country outputs
+[x] exploring individual generator output errors (e.g., FR moF/moP ii=5)
+[x] exploring the flat period GB Xmas 2017
+[x] exploring the errors in GB data
+[x] exploring the negative values in the IE data
+[x] exploring discontinuity in DE, NL data
+[x] saving the individual generator outages sparse matrix
+[x] saving the output data for re-use
+[x] exploring the min-max errors
+[x] looking at outages of only conventional plant, not renewables
+[x] Miscellaneous individual checks (further plt_approach_xmpls)
+[x] Use 't' rather than 'f','p' in the outage script
+===

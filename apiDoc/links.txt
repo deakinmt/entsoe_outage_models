@@ -1,0 +1,18 @@
+"Manual of Procedures for the ENTSO-E Central Information Transparency Platform Version 2.0", 
+1 May 2014
+https://eepublicdownloads.entsoe.eu/clean-documents/pre2015/resources/Transparency/ENTSO-E%20Manual%20of%20Procedures%20V2R0-2014-05-01.pdf
+
+
+
+"ENTSO-e Transparency Platform Data Extractions Process Implementationa Gudie".
+15/7/16
+https://transparency.entsoe.eu/content/static_content/download?path=/Static%20content/web%20api/RestfulAPI_IG.pdf
+
+"Transparency Platform restful API - user guide"
+Accessed 14/1/22
+https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html
+
+
+Appendix A.10 [BZ] Areas (from "Transparency Platform restful API - user guide")
+Accessed 14/1/22
+https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html#_areas
