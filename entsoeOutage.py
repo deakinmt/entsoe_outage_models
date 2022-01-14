@@ -205,6 +205,7 @@ https://transparency.entsoe.eu/content/static_content/Static%20content/knowledge
 
 if save_outputs:
     dn_out = os.path.join(fn_root,'data_out',)
+    _ = os.mkdir(dn_out) if ~os.path.exists(dn_out) else None
     with open(os.path.join(dn_out,'readme.txt'),'w') as file:
         file.write(save_readme)
     
