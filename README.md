@@ -3,6 +3,11 @@
 A package for building time-series models of generator outages
 based on NW European countries.
 
+Main usage of this code is the creation of time series of aggregated 
+generator outages for a number of Northwest European countries. This
+aggregated data is available at: 
+https://doi.org/10.25405/data.ncl.18393971
+
 Note
 ---
 In general, the scripts use options to select what to run - e.g.,
@@ -76,4 +81,11 @@ Acronyms
 - APs = Availability Periods
 - DPs = Datetime [Availability] Periods (reconciled APs for a single BZ/country)
 - ECR = [NGESO EMR Delivery Body's] Electricity Capacity Report
+
+
+Acknowledgements
+---
+This work was funded by the Supergen Energy Network hub (EP/S00078X/2)
+through the Climate-Energy Modelling for Assessing Resilience: Heat 
+Decarbonisation and Northwest European Supergrid (CLEARHEADS) project.
 
