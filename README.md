@@ -1,12 +1,22 @@
 # entsoe_outage_models
 
-A package for building time-series models of generator outages
-based on NW European countries.
+A package for building empirical and analytic time-series models of
+the aggregated unavailability of power generation fleets.
 
-Main usage of this code is the creation of time series of aggregated 
-generator outages for a number of Northwest European countries. This
-aggregated data is available at: 
+Main usage of this code has been in the creation of time series of 
+aggregated generator outages for a number of Northwest European 
+countries using the ENTSOe Transparency Platform, although code
+for generating analytic models of fleet unavailabilities is also 
+provided.
+
+The aggregated generator unavailability data for NW European 
+countries is available at:
 https://doi.org/10.25405/data.ncl.18393971
+
+This code was written for the analysis undertaken in the paper
+"Comparing Generator Unavailability Models with Empirical 
+Distributions from Open Energy Datasets" submitted to the PMAPS
+2022 conference (arxiv link to follow).
 
 Note
 ---
@@ -16,7 +26,7 @@ to enable those options.
 
 Workflow
 ---
-It is suggested that the data is approached in the following way:
+It is suggested that the usage is approached in the following way.
 1. The outage data for individual countries is download from 
   entsoeOutageDownload.py, using download_config.py.
 2. The production and generation units are downloaded from
@@ -31,7 +41,7 @@ It is suggested that the data is approached in the following way:
   "BE_Installed Capacity per Production Type_201501010000-202201010000";
   These should then be saved in the directory .\entsoe_outage_data\misc\inpr\.
 
-Clear Limitations
+Limitations with the ENTSOe outage data
 ---
 L1. By default, 'outages' which result in the output being 1.33
   times greater than the generator nominal power are neglected.
